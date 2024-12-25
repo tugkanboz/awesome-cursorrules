@@ -1,0 +1,70 @@
+# Project: RestAssured API Testing Framework
+
+## Framework Structure
+- Use Maven for project management
+- Implement modular test structure
+- Create separate packages for requests, responses, and tests
+- Use POJO classes for request/response models
+
+## Coding Standards
+- Follow Java code conventions
+- Use proper naming for test methods (should_return_expectedResponse_when_condition)
+- Implement builder pattern for request construction
+- Keep methods focused and concise
+
+## Test Organization
+- Group tests by API endpoints
+- Use TestNG for test execution
+- Implement test priorities
+- Create separate suites for different types of API tests
+
+## Best Practices
+- Use specification builders for repeated request parts
+- Implement proper response validation
+- Use JsonSchema validation
+- Handle authentication properly
+- Implement retry mechanism for flaky tests
+
+## Request/Response Handling
+- Use POJO classes with Jackson annotations
+- Implement proper serialization/deserialization
+- Handle different content types
+- Proper error handling and assertions
+
+## Authentication
+- Handle different auth methods (Basic, OAuth, JWT)
+- Secure credential management
+- Implement token management
+- Handle session management when required
+
+## Test Data Management
+- Use JSON/YAML files for test data
+- Implement environment-specific configurations
+- Use TestNG data providers
+- Handle test data cleanup
+
+## Reporting
+- Use Allure reporting
+- Include request/response details in reports
+- Log test steps and assertions
+- Generate comprehensive test execution reports
+
+## Documentation
+- Use JavaDoc for all methods
+- Document API endpoints and their usage
+- Maintain up-to-date README
+- Include setup instructions and examples
+
+## Performance Considerations
+- Implement response time assertions
+- Handle concurrent API requests
+- Monitor memory usage
+- Implement connection pooling
+
+## CI/CD Integration
+- Configure for Jenkins/GitHub Actions
+- Set up different environment configurations
+- Implement parallel execution
+- Configure report generation
+
+Remember to handle rate limiting, API versioning, and different environment configurations properly.

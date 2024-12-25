@@ -1,0 +1,64 @@
+# Project: Selenium Python Test Automation Framework
+
+## Framework Structure
+- Use pytest as the testing framework
+- Implement Page Object Model pattern
+- Maintain conftest.py for fixture management
+- Use pytest fixtures for setup and teardown
+
+## Coding Standards
+- Follow PEP 8 style guide
+- Use type hints for better code readability
+- Maximum line length: 88 characters (black formatter standard)
+- Use snake_case for function and variable names
+
+## Test Organization
+- Group tests using pytest markers
+- Use parametrize for data-driven tests
+- Implement test categories (smoke, regression, etc.)
+- Keep test files organized by features
+
+## Best Practices
+- Use pytest-xdist for parallel test execution
+- Implement proper logging using Python's logging module
+- Use pytest-html for report generation
+- Implement screenshot capture for failed tests
+- Use soft assertions when appropriate
+
+## WebDriver Management
+- Use webdriver_manager for browser setup
+- Implement cross-browser testing
+- Handle driver configurations through pytest.ini
+- Implement headless mode for CI/CD
+
+## Test Data Management
+- Use YAML/JSON files for test data
+- Implement environment-specific configurations
+- Use pytest fixtures for data management
+- Keep sensitive data in environment variables
+
+## Utility Functions
+- Create reusable helper functions
+- Implement custom wait conditions
+- Add browser specific utilities
+- Create common assertion functions
+
+## Documentation
+- Use docstrings for all functions and classes
+- Maintain requirements.txt
+- Create detailed README.md
+- Document test cases in Gherkin format when applicable
+
+## Code Quality
+- Use black for code formatting
+- Implement pylint/flake8 for code quality
+- Regular code reviews
+- Use mypy for type checking
+
+## CI/CD Integration
+- Configure GitHub Actions/Jenkins pipeline
+- Set up Docker containers for test execution
+- Implement test result reporting
+- Configure parallel execution settings
+
+Remember to handle dynamic elements, browser variations, and environmental differences effectively.

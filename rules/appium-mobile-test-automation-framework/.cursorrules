@@ -1,0 +1,82 @@
+# Project: Appium Mobile Test Automation Framework
+
+## Framework Structure
+- Support both Android and iOS platforms
+- Use Page Object Model pattern
+- Implement proper test hierarchy
+- Create platform-specific implementations
+
+## Coding Standards
+- Follow language-specific conventions (Java/Python)
+- Use proper naming conventions
+- Implement clean code principles
+- Maximum method length: 30 lines
+
+## Mobile Elements Strategy
+- Use proper element locator strategies
+- Implement gestures handling
+- Handle native, hybrid, and web contexts
+- Create reusable mobile actions
+
+## Test Organization
+- Group tests by features/screens
+- Implement test priorities
+- Create separate suites for platforms
+- Use proper test categorization
+
+## Best Practices
+- Handle app states properly
+- Implement proper waiting strategies
+- Use proper capability management
+- Handle different screen sizes/resolutions
+- Implement proper cleanup
+
+## Device Management
+- Handle real devices and emulators
+- Implement device farms integration
+- Manage app installation/uninstallation
+- Handle different OS versions
+
+## Application Management
+- Handle app lifecycle
+- Manage app permissions
+- Handle app reset strategies
+- Implement proper app configuration
+
+## Test Data
+- Manage test data for different platforms
+- Handle localization testing
+- Implement data-driven tests
+- Keep sensitive data secure
+
+## Reporting
+- Generate platform-specific reports
+- Include screenshots and videos
+- Log device information
+- Track test execution metrics
+
+## Performance Monitoring
+- Monitor app performance
+- Track memory usage
+- Measure app launch time
+- Monitor battery consumption
+
+## CI/CD Integration
+- Configure for different CI platforms
+- Handle parallel execution
+- Manage device allocation
+- Configure test distribution
+
+## Error Handling
+- Implement proper exception handling
+- Create recovery mechanisms
+- Handle device-specific errors
+- Implement retry mechanisms
+
+## Documentation
+- Document setup requirements
+- Maintain platform-specific guides
+- Include troubleshooting guides
+- Document known issues
+
+Remember to handle platform-specific behaviors and device fragmentation properly.

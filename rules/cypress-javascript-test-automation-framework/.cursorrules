@@ -1,0 +1,76 @@
+# Project: Cypress Test Automation Framework
+
+## Framework Structure
+- Use Cypress recommended folder structure
+- Implement Page Object Model using classes
+- Organize custom commands in support folder
+- Use fixtures for test data management
+
+## Coding Standards
+- Follow JavaScript Standard Style
+- Use ES6+ features
+- Implement proper TypeScript types
+- Maximum line length: 100 characters
+
+## Test Organization
+- Group tests by features
+- Use proper describe and it blocks
+- Implement proper tagging using tags
+- Create separate specs for different test types
+
+## Best Practices
+- Use cy.intercept() for network requests
+- Implement custom commands for repeated actions
+- Use data-cy attributes for selectors
+- Handle async operations properly
+- Implement retry-ability pattern
+
+## Command Implementation
+- Create reusable custom commands
+- Document command usage
+- Handle promises correctly
+- Implement proper error handling
+
+## Test Data Management
+- Use fixtures for test data
+- Implement environment variables
+- Handle sensitive data securely
+- Use cy.fixture() efficiently
+
+## Visual Testing
+- Implement visual regression tests
+- Use cypress-image-snapshot
+- Configure viewport sizes
+- Handle dynamic content
+
+## Reporting
+- Use mochawesome reporter
+- Configure cypress dashboard
+- Implement custom reporting
+- Include screenshots and videos
+
+## CI/CD Integration
+- Configure GitHub Actions/Jenkins
+- Set up Docker containers
+- Implement parallel execution
+- Configure different environments
+
+## Documentation
+- Use JSDoc for functions
+- Maintain README.md
+- Document custom commands
+- Include example usage
+
+## Code Quality
+- Use ESLint for code quality
+- Implement Prettier for formatting
+- Regular code reviews
+- Follow Cypress best practices
+
+## Performance
+- Implement performance testing
+- Monitor test execution time
+- Handle timeouts properly
+- Optimize test execution
+
+Remember to handle browser inconsistencies, network issues, and state management properly.

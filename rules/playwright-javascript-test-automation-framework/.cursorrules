@@ -1,0 +1,76 @@
+# Project: Playwright Test Automation Framework
+
+## Framework Structure
+- Use Playwright Test as the test runner
+- Implement Page Object Model pattern
+- Maintain fixtures in separate files
+- Use TypeScript for better type safety
+
+## Coding Standards
+- Follow TypeScript best practices
+- Use ESLint and Prettier for code formatting
+- Maximum line length: 100 characters
+- Use async/await for all async operations
+
+## Test Organization
+- Group tests by features using describe blocks
+- Use test.describe.parallel() for parallel execution
+- Implement proper test tagging
+- Create separate configs for different environments
+
+## Best Practices
+- Use auto-waiting mechanisms
+- Implement visual comparison testing
+- Use network interception when needed
+- Implement proper error handling
+- Use built-in assertions effectively
+
+## Web Element Handling
+- Use locator-based element handling
+- Implement proper waiting strategies
+- Use frame and shadow-DOM handling
+- Implement custom element handling methods
+
+## Test Data Management
+- Use test fixtures for data management
+- Implement environment variables
+- Use dotenv for configuration
+- Keep sensitive data secure
+
+## Reporting
+- Use built-in HTML reporter
+- Implement Allure reporting
+- Configure CI/CD reporting
+- Include screenshots and videos
+
+## Browser Management
+- Handle multiple browser types
+- Configure browser contexts properly
+- Manage browser states
+- Handle different viewport sizes
+
+## Authentication
+- Implement state management
+- Handle different auth methods
+- Store authentication state
+- Reuse authentication states
+
+## Performance Testing
+- Use built-in performance APIs
+- Implement timing measurements
+- Monitor resource usage
+- Track network requests
+
+## Mobile Testing
+- Configure mobile viewports
+- Implement mobile gestures
+- Handle responsive design testing
+- Test mobile-specific features
+
+## Documentation
+- Use TSDoc for documentation
+- Maintain comprehensive README
+- Document setup process
+- Include example usage
+
+Remember to utilize Playwright's built-in features for reliable and efficient testing.

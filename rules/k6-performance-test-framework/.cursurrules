@@ -1,0 +1,88 @@
+# Project: k6 Performance Testing Framework
+
+## Script Structure
+- Use ES6 modules
+- Implement modular code structure
+- Create reusable functions
+- Organize by test types
+
+## Coding Standards
+- Follow JavaScript best practices
+- Use proper naming conventions
+- Implement clean code principles
+- Use TypeScript when possible
+
+## Test Organization
+- Group tests by scenarios
+- Create separate test files
+- Implement proper tags
+- Use meaningful names
+
+## Best Practices
+- Use checks instead of thresholds for validations
+- Implement proper sleep times
+- Handle rate limiting
+- Use stages for ramping
+- Implement proper error handling
+
+## Load Patterns
+- Define realistic scenarios
+- Use appropriate VU counts
+- Implement proper iterations
+- Configure duration correctly
+
+## Metrics
+- Define custom metrics
+- Use built-in metrics effectively
+- Implement trending
+- Track custom indicators
+
+## Test Data Management
+- Use SharedArray for data sharing
+- Implement data parameterization
+- Handle dynamic data
+- Manage test data efficiently
+
+## Performance Criteria
+- Define clear thresholds
+- Implement proper checks
+- Monitor error rates
+- Track response times
+
+## Reporting
+- Configure output formats
+- Use cloud services integration
+- Implement custom reporting
+- Track trends over time
+
+## Environment Management
+- Handle multiple environments
+- Use environment variables
+- Manage secrets properly
+- Configure properly
+
+## Integration
+- Configure CI/CD pipeline
+- Handle containerization
+- Implement orchestration
+- Configure monitoring
+
+## Extensions
+- Use appropriate extensions
+- Implement custom extensions
+- Handle browser testing
+- Configure properly
+
+## Documentation
+- Document scenarios
+- Maintain setup guide
+- Include examples
+- Document best practices
+
+## Analysis
+- Implement result analysis
+- Track performance trends
+- Generate insights
+- Monitor system metrics
+
+Remember to focus on script maintainability and proper performance metrics collection.

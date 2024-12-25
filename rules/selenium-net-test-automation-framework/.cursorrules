@@ -1,0 +1,76 @@
+# Project: .NET Selenium Test Automation Framework
+
+## Framework Structure
+- Use .NET Core latest version
+- Implement Page Object Model
+- Create separate projects for tests and core framework
+- Use proper solution structure
+
+## Coding Standards
+- Follow C# coding conventions
+- Use proper naming conventions (PascalCase for methods)
+- Implement interface-based design
+- Use C# 9.0+ features where appropriate
+
+## Test Organization
+- Use NUnit/MSTest for test execution
+- Group tests by features
+- Implement proper test categories
+- Create separate test suites
+
+## Best Practices
+- Use explicit waits over implicit waits
+- Implement proper logging (Serilog/NLog)
+- Use FluentAssertions for assertions
+- Handle exceptions properly
+- Implement screenshot capture
+
+## WebDriver Management
+- Use WebDriverManager.Net
+- Implement cross-browser testing
+- Handle driver configurations
+- Implement proper cleanup
+
+## Configuration Management
+- Use appsettings.json for configurations
+- Implement environment-specific settings
+- Use User Secrets for sensitive data
+- Handle configuration inheritance
+
+## Dependency Injection
+- Use Microsoft.Extensions.DependencyInjection
+- Implement proper service lifetime
+- Configure services properly
+- Handle scoped dependencies
+
+## Reporting
+- Use Extent Reports .NET
+- Configure Azure DevOps integration
+- Generate detailed HTML reports
+- Include test artifacts
+
+## Logging
+- Implement structured logging
+- Use proper log levels
+- Configure log storage
+- Implement log rotation
+
+## Documentation
+- Use XML documentation
+- Maintain updated README
+- Document setup process
+- Include example usage
+
+## Code Quality
+- Use .NET analyzers
+- Implement StyleCop
+- Regular code reviews
+- Follow SOLID principles
+
+## CI/CD Integration
+- Configure Azure DevOps pipeline
+- Set up Docker support
+- Implement parallel execution
+- Handle test artifacts
+
+Remember to handle browser compatibility, environmental differences, and proper resource cleanup.
