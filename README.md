@@ -21,7 +21,6 @@ awesome-cursorrules/
 │   └── .cursorrules       # Cypress specific rules
 ├── playwright/
 │   └── .cursorrules       # Playwright specific rules
-└── ... other frameworks
 ```
 
 ## What is .cursorrules?
@@ -110,96 +109,7 @@ project/
 ├── .cursorrules          # AI instruction file
 ├── src/                  # Source code
 ├── tests/                # Test files
-└── README.md            # Project documentation
-```
-
-## Test Automation Use Cases
-
-### 1. Framework Development
-- Enforces consistent test structure across automation frameworks
-- Maintains standard patterns for page objects, test cases, and utilities
-- Ensures proper error handling and logging practices
-
-### 2. Test Case Generation
-```plaintext
-# Example .cursorrules for test case generation
-TEST CASE STRUCTURE:
-- Use descriptive test method names (format: should_doSomething_when_condition)
-- Include proper setup and teardown methods
-- Implement proper wait strategies
-- Add meaningful assertions
-- Include test data management
-```
-
-### 3. Common Test Scenarios
-```plaintext
-# Login Test Example
-SCENARIO: User Login
-GIVEN: 
-- Page Object pattern is used
-- Explicit waits are implemented
-- Test data is externalized
-WHEN:
-- Methods follow naming convention
-- Proper assertions are used
-THEN:
-- Generate structured test case
-```
-
-### 4. Test Maintenance
-- Suggests refactoring opportunities for test code
-- Helps maintain consistent logging patterns
-- Ensures proper exception handling
-- Guides test data management
-
-### 5. Cross-Browser Testing
-```plaintext
-# Browser Configuration Rules
-BROWSER SETUP:
-- Use WebDriverManager for setup
-- Implement cross-browser support
-- Handle browser-specific scenarios
-- Include mobile responsiveness tests
-```
-
-### 6. API Testing Structure
-```plaintext
-# API Test Guidelines
-API TESTS:
-- Use proper request/response structures
-- Implement schema validation
-- Handle authentication properly
-- Include status code verification
-```
-
-### 7. Performance Testing
-```plaintext
-# Performance Test Rules
-PERFORMANCE:
-- Define proper load patterns
-- Include appropriate assertions
-- Monitor system metrics
-- Generate comprehensive reports
-```
-
-### 8. Real Example: Selenium Test Case
-```java
-// Generated based on .cursorrules
-@Test
-public void should_successfullyLogin_when_validCredentialsProvided() {
-    // Structured according to rules
-    loginPage
-        .openLoginPage()
-        .enterUsername(TEST_USER)
-        .enterPassword(TEST_PASS)
-        .clickLoginButton();
-    
-    // Assertions following rules
-    Assert.assertTrue(
-        "User should be redirected to dashboard",
-        dashboardPage.isDashboardVisible()
-    );
-}
+└── README.md             # Project documentation
 ```
 
 ## How to Use This Collection
@@ -219,17 +129,6 @@ public void should_successfullyLogin_when_validCredentialsProvided() {
    - Test organization standards
    - Reporting requirements
    
-```bash
-# Example project structure
-my-selenium-project/
-├── .cursorrules           # Copied from this repository
-├── src/
-│   ├── test/
-│   │   ├── java/
-│   │   └── resources/
-│   └── main/
-└── pom.xml
-```
 
 ## Contributing
 
