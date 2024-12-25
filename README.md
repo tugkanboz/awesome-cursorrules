@@ -1,4 +1,4 @@
-# Test Automation .cursorrules Collection
+# Awesome CursorRules
 
 This repository contains a curated collection of `.cursorrules` configurations for various test automation frameworks and tools. It aims to provide standardized AI assistance for test automation development using Cursor AI.
 
