@@ -110,25 +110,7 @@ project/
 ├── src/                  # Source code
 ├── tests/                # Test files
 └── README.md             # Project documentation
-```
-
-## How to Use This Collection
-
-1. Choose your test automation framework/tool
-2. Copy the corresponding `.cursorrules` file from this repository
-3. Place it in your project's root directory
-4. Start using Cursor AI for intelligent test automation assistance
-
-### Example Usage with Selenium Java
-
-1. Copy the `.cursorrules` from `selenium-java/` directory
-2. Place it in your Selenium project root
-3. Cursor AI will now understand:
-   - Page Object Model patterns
-   - Best practices for waits and assertions
-   - Test organization standards
-   - Reporting requirements
-   
+``` 
 
 ## Contributing
 
