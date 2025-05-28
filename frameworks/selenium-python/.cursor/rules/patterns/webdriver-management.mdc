@@ -1,0 +1,423 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# WebDriver Management Excellence
+
+## Modern WebDriver Architecture
+- **Factory Pattern**: Centralized driver creation with configuration
+- **Session Management**: Proper lifecycle and resource cleanup
+- **Cross-Browser Support**: Unified interface for different browsers
+- **Grid Integration**: Seamless local and remote execution
+
+## Advanced Driver Factory
+```python
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.edge.options import Options as EdgeOptions
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.firefox import GeckoDriverManager
+from webdriver_manager.microsoft import EdgeChromiumDriverManager
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.edge.service import Service as EdgeService
+from typing import Dict, Any, Optional
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+class WebDriverFactory:
+    """Advanced WebDriver factory with comprehensive configuration."""
+    
+    SUPPORTED_BROWSERS = ['chrome', 'firefox', 'edge']
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.drivers = []  # Track created drivers for cleanup
+    
+    def create_driver(self, browser: str, headless: bool = False, 
+                     remote_url: Optional[str] = None) -> webdriver.Remote:
+        """Create WebDriver instance with advanced configuration."""
+        
+        if browser.lower() not in self.SUPPORTED_BROWSERS:
+            raise ValueError(f"Unsupported browser: {browser}. Supported: {self.SUPPORTED_BROWSERS}")
+        
+        try:
+            if remote_url:
+                driver = self._create_remote_driver(browser, headless, remote_url)
+            else:
+                driver = self._create_local_driver(browser, headless)
+            
+            # Configure driver settings
+            self._configure_driver(driver)
+            self.drivers.append(driver)
+            
+            logger.info(f"Created {browser} driver (headless: {headless}, remote: {bool(remote_url)})")
+            return driver
+            
+        except Exception as e:
+            logger.error(f"Failed to create {browser} driver: {str(e)}")
+            raise
+    
+    def _create_local_driver(self, browser: str, headless: bool) -> webdriver.Remote:
+        """Create local WebDriver instance."""
+        browser = browser.lower()
+        
+        if browser == 'chrome':
+            return self._create_chrome_driver(headless)
+        elif browser == 'firefox':
+            return self._create_firefox_driver(headless)
+        elif browser == 'edge':
+            return self._create_edge_driver(headless)
+        else:
+            raise ValueError(f"Unsupported browser: {browser}")
+    
+    def _create_remote_driver(self, browser: str, headless: bool, remote_url: str) -> webdriver.Remote:
+        """Create remote WebDriver instance for Selenium Grid."""
+        capabilities = self._get_capabilities(browser, headless)
+        
+        driver = webdriver.Remote(
+            command_executor=remote_url,
+            desired_capabilities=capabilities
+        )
+        
+        return driver
+    
+    def _create_chrome_driver(self, headless: bool) -> webdriver.Chrome:
+        """Create optimized Chrome driver."""
+        options = ChromeOptions()
+        
+        # Performance optimizations
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-web-security")
+        options.add_argument("--allow-running-insecure-content")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-plugins")
+        options.add_argument("--disable-images")
+        
+        # Window configuration
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--start-maximized")
+        
+        if headless:
+            options.add_argument("--headless=new")  # Use new headless mode
+        
+        # Additional options from config
+        if 'chrome_options' in self.config:
+            for option in self.config['chrome_options']:
+                options.add_argument(option)
+        
+        # Preferences
+        prefs = {
+            "profile.default_content_setting_values": {
+                "notifications": 2,  # Block notifications
+                "geolocation": 2,    # Block location sharing
+            },
+            "profile.managed_default_content_settings": {
+                "images": 2  # Block images for faster loading
+            }
+        }
+        options.add_experimental_option("prefs", prefs)
+        
+        # Service configuration
+        service = ChromeService(ChromeDriverManager().install())
+        
+        return webdriver.Chrome(service=service, options=options)
+    
+    def _create_firefox_driver(self, headless: bool) -> webdriver.Firefox:
+        """Create optimized Firefox driver."""
+        options = FirefoxOptions()
+        
+        # Performance optimizations
+        options.set_preference("dom.webnotifications.enabled", False)
+        options.set_preference("media.volume_scale", "0.0")
+        options.set_preference("browser.cache.disk.enable", False)
+        options.set_preference("browser.cache.memory.enable", False)
+        options.set_preference("network.http.use-cache", False)
+        
+        if headless:
+            options.add_argument("--headless")
+        
+        # Window size
+        options.add_argument("--width=1920")
+        options.add_argument("--height=1080")
+        
+        service = FirefoxService(GeckoDriverManager().install())
+        
+        return webdriver.Firefox(service=service, options=options)
+    
+    def _create_edge_driver(self, headless: bool) -> webdriver.Edge:
+        """Create optimized Edge driver."""
+        options = EdgeOptions()
+        
+        # Similar optimizations as Chrome
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        
+        if headless:
+            options.add_argument("--headless")
+        
+        service = EdgeService(EdgeChromiumDriverManager().install())
+        
+        return webdriver.Edge(service=service, options=options)
+    
+    def _get_capabilities(self, browser: str, headless: bool) -> Dict[str, Any]:
+        """Get capabilities for remote WebDriver."""
+        capabilities = {
+            'chrome': {
+                "browserName": "chrome",
+                "version": "latest",
+                "platform": "ANY",
+                "chromeOptions": {
+                    "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+                }
+            },
+            'firefox': {
+                "browserName": "firefox",
+                "version": "latest",
+                "platform": "ANY"
+            },
+            'edge': {
+                "browserName": "MicrosoftEdge",
+                "version": "latest",
+                "platform": "ANY"
+            }
+        }
+        
+        caps = capabilities.get(browser.lower(), capabilities['chrome'])
+        
+        if headless:
+            if browser.lower() == 'chrome':
+                caps["chromeOptions"]["args"].append("--headless=new")
+            elif browser.lower() == 'firefox':
+                caps["moz:firefoxOptions"] = {"args": ["--headless"]}
+        
+        return caps
+    
+    def _configure_driver(self, driver: webdriver.Remote) -> None:
+        """Configure driver with common settings."""
+        # Timeouts
+        driver.implicitly_wait(self.config.get('implicit_wait', 10))
+        driver.set_page_load_timeout(self.config.get('page_load_timeout', 30))
+        driver.set_script_timeout(self.config.get('script_timeout', 30))
+        
+        # Window management
+        try:
+            driver.maximize_window()
+        except Exception:
+            # Some drivers/environments don't support maximize
+            driver.set_window_size(1920, 1080)
+    
+    def quit_all_drivers(self) -> None:
+        """Clean up all created drivers."""
+        for driver in self.drivers:
+            try:
+                driver.quit()
+                logger.debug("Driver cleanup successful")
+            except Exception as e:
+                logger.warning(f"Driver cleanup failed: {str(e)}")
+        
+        self.drivers.clear()
+```
+
+## pytest Integration
+```python
+import pytest
+from typing import Generator
+from selenium import webdriver
+
+@pytest.fixture(scope="session")
+def driver_config() -> Dict[str, Any]:
+    """Driver configuration fixture."""
+    return {
+        'implicit_wait': 10,
+        'page_load_timeout': 30,
+        'script_timeout': 30,
+        'chrome_options': [
+            '--disable-blink-features=AutomationControlled',
+            '--disable-infobars'
+        ]
+    }
+
+@pytest.fixture(scope="session")
+def driver_factory(driver_config) -> Generator[WebDriverFactory, None, None]:
+    """WebDriver factory fixture with session scope."""
+    factory = WebDriverFactory(driver_config)
+    yield factory
+    factory.quit_all_drivers()
+
+@pytest.fixture(scope="function")
+def driver(request, driver_factory) -> Generator[webdriver.Remote, None, None]:
+    """WebDriver fixture for individual tests."""
+    # Get test parameters
+    browser = request.config.getoption("--browser", default="chrome")
+    headless = request.config.getoption("--headless", default=False)
+    remote_url = request.config.getoption("--remote-url", default=None)
+    
+    # Create driver
+    driver = driver_factory.create_driver(browser, headless, remote_url)
+    
+    yield driver
+    
+    # Cleanup after test
+    try:
+        driver.quit()
+    except Exception as e:
+        logger.warning(f"Driver cleanup failed: {str(e)}")
+
+@pytest.fixture(scope="function")
+def chrome_driver(driver_factory) -> Generator[webdriver.Chrome, None, None]:
+    """Chrome-specific driver fixture."""
+    driver = driver_factory.create_driver("chrome")
+    yield driver
+    driver.quit()
+
+@pytest.fixture(scope="function")
+def headless_driver(driver_factory) -> Generator[webdriver.Remote, None, None]:
+    """Headless driver fixture for CI/CD."""
+    driver = driver_factory.create_driver("chrome", headless=True)
+    yield driver
+    driver.quit()
+```
+
+## Advanced Configuration Management
+```python
+class BrowserConfig:
+    """Browser configuration management."""
+    
+    def __init__(self, environment: str = "dev"):
+        self.environment = environment
+        self.config = self._load_browser_config()
+    
+    def _load_browser_config(self) -> Dict[str, Any]:
+        """Load browser configuration from file."""
+        config_file = f"config/browsers/{self.environment}.yaml"
+        
+        default_config = {
+            'default_browser': 'chrome',
+            'headless': False,
+            'remote_url': None,
+            'implicit_wait': 10,
+            'page_load_timeout': 30,
+            'window_size': {'width': 1920, 'height': 1080},
+            'chrome': {
+                'options': [
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu'
+                ],
+                'prefs': {
+                    'profile.default_content_setting_values.notifications': 2
+                }
+            },
+            'firefox': {
+                'preferences': {
+                    'dom.webnotifications.enabled': False,
+                    'media.volume_scale': '0.0'
+                }
+            }
+        }
+        
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                file_config = yaml.safe_load(f)
+                # Merge with default config
+                default_config.update(file_config)
+        
+        return default_config
+    
+    def get_browser_options(self, browser: str) -> Dict[str, Any]:
+        """Get browser-specific options."""
+        return self.config.get(browser, {})
+    
+    def is_remote_execution(self) -> bool:
+        """Check if remote execution is configured."""
+        return self.config.get('remote_url') is not None
+```
+
+## Docker Integration
+```python
+class DockerWebDriver:
+    """WebDriver management for Docker containers."""
+    
+    def __init__(self, selenium_hub_url: str = "http://selenium-hub:4444/wd/hub"):
+        self.hub_url = selenium_hub_url
+    
+    def create_docker_driver(self, browser: str, version: str = "latest") -> webdriver.Remote:
+        """Create WebDriver for Docker Selenium Grid."""
+        
+        capabilities = {
+            "browserName": browser,
+            "version": version,
+            "platform": "LINUX",
+            "enableVNC": True,
+            "enableVideo": True
+        }
+        
+        # Browser-specific configurations
+        if browser.lower() == "chrome":
+            capabilities.update({
+                "chromeOptions": {
+                    "args": [
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--remote-debugging-port=9222"
+                    ]
+                }
+            })
+        
+        try:
+            driver = webdriver.Remote(
+                command_executor=self.hub_url,
+                desired_capabilities=capabilities
+            )
+            
+            driver.implicitly_wait(10)
+            driver.set_page_load_timeout(30)
+            
+            return driver
+            
+        except Exception as e:
+            logger.error(f"Failed to create Docker driver: {str(e)}")
+            raise
+```
+
+## Parallel Execution Support
+```python
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+class ParallelDriverManager:
+    """Manage multiple WebDriver instances for parallel execution."""
+    
+    def __init__(self, max_workers: int = 4):
+        self.max_workers = max_workers
+        self.driver_pool = threading.local()
+        self.factory = None
+    
+    def initialize_factory(self, config: Dict[str, Any]) -> None:
+        """Initialize WebDriver factory for thread."""
+        if not hasattr(self.driver_pool, 'factory'):
+            self.driver_pool.factory = WebDriverFactory(config)
+    
+    def get_driver(self, browser: str = "chrome", headless: bool = True) -> webdriver.Remote:
+        """Get WebDriver instance for current thread."""
+        if not hasattr(self.driver_pool, 'driver') or not self.driver_pool.driver:
+            self.driver_pool.driver = self.driver_pool.factory.create_driver(browser, headless)
+        
+        return self.driver_pool.driver
+    
+    def quit_driver(self) -> None:
+        """Quit WebDriver for current thread."""
+        if hasattr(self.driver_pool, 'driver') and self.driver_pool.driver:
+            self.driver_pool.driver.quit()
+            self.driver_pool.driver = None
+```

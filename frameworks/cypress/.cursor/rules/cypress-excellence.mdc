@@ -1,0 +1,245 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Cypress Testing Excellence
+
+## Modern Framework Architecture
+- **TypeScript Integration**: Full TypeScript support with intelligent intellisense
+- **Component Testing**: Isolated component testing alongside E2E scenarios
+- **Advanced Page Objects**: Modular page object patterns with inheritance
+- **Smart Fixture Management**: Dynamic test data with environment-aware loading
+
+## Element Selection Revolution
+```javascript
+// Modern approach: Reliable, maintainable selectors
+cy.get('[data-cy=user-dashboard]')         // Preferred: Test-specific attributes
+  .find('[data-cy=profile-section]')       // Hierarchical selection
+  .within(() => {                          // Scoped interactions
+    cy.get('[data-cy=edit-button]').click()
+  })
+
+// Avoid: Brittle selectors that break with UI changes
+// cy.get('.btn.btn-primary.user-btn')     // CSS classes
+// cy.get('#user-123-edit')                // Dynamic IDs
+```
+
+## Advanced Custom Commands
+```javascript
+// Example: Intelligent login command with session management
+Cypress.Commands.add('loginAs', (userType, options = {}) => {
+  const { persist = true, skipWelcome = true } = options
+  
+  cy.session(userType, () => {
+    cy.visit('/login')
+    cy.fixture(`users/${userType}`).then(user => {
+      cy.get('[data-cy=email-input]').type(user.email)
+      cy.get('[data-cy=password-input]').type(user.password)
+      cy.get('[data-cy=login-button]').click()
+      
+      // Wait for successful authentication
+      cy.url().should('include', '/dashboard')
+      cy.get('[data-cy=user-avatar]').should('be.visible')
+    })
+  }, {
+    validate: () => {
+      // Verify session is still valid
+      cy.getCookie('auth-token').should('exist')
+    },
+    cacheAcrossSpecs: persist
+  })
+  
+  if (skipWelcome) {
+    cy.dismissWelcomeModal()
+  }
+})
+```
+
+## Network Testing Mastery
+```javascript
+// Example: Comprehensive API testing with validation
+it('should handle user creation workflow', () => {
+  // Set up network intercepts
+  cy.intercept('POST', '/api/users', {
+    statusCode: 201,
+    body: { id: 'user-123', status: 'created' }
+  }).as('createUser')
+  
+  cy.intercept('GET', '/api/users/user-123', {
+    fixture: 'user-profile.json'
+  }).as('getUserProfile')
+  
+  // Perform user actions
+  cy.visit('/users/new')
+  cy.fillUserForm({
+    name: 'John Doe',
+    email: 'john@example.com',
+    role: 'admin'
+  })
+  cy.get('[data-cy=submit-button]').click()
+  
+  // Validate network interactions
+  cy.wait('@createUser').then(interception => {
+    expect(interception.request.body).to.deep.include({
+      name: 'John Doe',
+      email: 'john@example.com'
+    })
+  })
+  
+  cy.wait('@getUserProfile')
+  cy.get('[data-cy=success-message]').should('contain', 'User created successfully')
+})
+```
+
+## Modern Test Organization
+```javascript
+// Example: Feature-based test organization with proper setup
+describe('User Management Feature', () => {
+  beforeEach(() => {
+    // Environment-aware setup
+    cy.setupTestEnvironment()
+    cy.loginAs('admin')
+    cy.navigateToUserManagement()
+  })
+  
+  context('User Creation', () => {
+    it('should create user with valid data', { tags: ['@smoke', '@user-management'] }, () => {
+      cy.createUser({
+        name: 'Test User',
+        email: 'test@example.com',
+        permissions: ['read', 'write']
+      })
+      
+      cy.verifyUserExists('test@example.com')
+      cy.verifyUserPermissions('test@example.com', ['read', 'write'])
+    })
+    
+    it('should validate required fields', { tags: ['@validation'] }, () => {
+      cy.get('[data-cy=create-user-button]').click()
+      cy.get('[data-cy=submit-button]').click()
+      
+      cy.get('[data-cy=name-error]').should('contain', 'Name is required')
+      cy.get('[data-cy=email-error]').should('contain', 'Email is required')
+    })
+  })
+  
+  context('User Permissions', () => {
+    beforeEach(() => {
+      cy.createTestUser('permissions-test-user')
+    })
+    
+    it('should update user permissions', { tags: ['@permissions'] }, () => {
+      cy.editUserPermissions('permissions-test-user', {
+        add: ['admin'],
+        remove: ['read']
+      })
+      
+      cy.verifyUserPermissions('permissions-test-user', ['write', 'admin'])
+    })
+  })
+})
+```
+
+## Performance & Reliability Optimization
+```javascript
+// Example: Optimized waiting strategies
+Cypress.Commands.add('waitForStableDOM', (selector, options = {}) => {
+  const { timeout = 10000, interval = 100 } = options
+  
+  cy.get(selector, { timeout }).should('be.visible').then($el => {
+    const initialRect = $el[0].getBoundingClientRect()
+    
+    cy.wait(interval).then(() => {
+      cy.get(selector).then($newEl => {
+        const newRect = $newEl[0].getBoundingClientRect()
+        
+        if (initialRect.x !== newRect.x || initialRect.y !== newRect.y) {
+          cy.waitForStableDOM(selector, options) // Recursive wait
+        }
+      })
+    })
+  })
+})
+
+// Usage in tests
+cy.waitForStableDOM('[data-cy=dynamic-content]')
+  .click() // Safe to interact after DOM is stable
+```
+
+## Visual & Accessibility Testing
+```javascript
+// Example: Comprehensive visual regression testing
+it('should maintain visual consistency', () => {
+  cy.visit('/dashboard')
+  cy.loginAs('standard-user')
+  
+  // Wait for all content to load
+  cy.get('[data-cy=dashboard-content]').should('be.visible')
+  cy.waitForSkeletonLoading()
+  
+  // Visual regression test
+  cy.compareSnapshot('dashboard-layout', {
+    threshold: 0.02,
+    thresholdType: 'percent'
+  })
+  
+  // Accessibility validation
+  cy.checkA11y('[data-cy=main-content]', {
+    runOnly: {
+      type: 'tag',
+      values: ['wcag2a', 'wcag2aa']
+    }
+  })
+})
+```
+
+## CI/CD Integration Excellence
+```javascript
+// cypress.config.js - Environment-aware configuration
+module.exports = defineConfig({
+  e2e: {
+    baseUrl: process.env.CYPRESS_BASE_URL || 'http://localhost:3000',
+    supportFile: 'cypress/support/e2e.js',
+    specPattern: 'cypress/e2e/**/*.cy.{js,ts}',
+    
+    // Advanced configuration
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    video: process.env.CI,
+    screenshotOnRunFailure: true,
+    
+    // Performance optimizations
+    numTestsKeptInMemory: 0,
+    experimentalMemoryManagement: true,
+    
+    setupNodeEvents(on, config) {
+      // Plugin configuration
+      require('cypress-terminal-report/src/installLogsPrinter')(on)
+      require('@cypress/code-coverage/task')(on, config)
+      
+      // Environment-specific setup
+      config.env = {
+        ...config.env,
+        ...process.env
+      }
+      
+      return config
+    }
+  },
+  
+  component: {
+    devServer: {
+      framework: 'react',
+      bundler: 'webpack'
+    },
+    specPattern: 'src/**/*.cy.{js,ts,jsx,tsx}'
+  }
+})
+```
+
+## Advanced Debugging & Maintenance
+- **Comprehensive Logging**: Detailed command logging with context
+- **Failure Analysis**: Automatic screenshot and video capture with timeline
+- **Performance Monitoring**: Test execution metrics and optimization recommendations
+- **Parallel Execution**: Intelligent test distribution across CI/CD pipeline stages

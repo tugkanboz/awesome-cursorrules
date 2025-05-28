@@ -3,3 +3,118 @@ description:
 globs:
 alwaysApply: false
 ---
+# Selenium Python Framework Architecture
+
+## Modern Framework Foundation
+- **pytest Framework**: Leverage pytest's powerful fixture system and plugin ecosystem
+- **Modular Architecture**: Separate concerns with clear package structure
+- **Configuration Management**: Environment-specific settings with proper inheritance
+- **Dependency Management**: Pinned versions with regular security updates
+
+## Project Structure Best Practices
+```
+selenium-project/
+├── tests/
+│   ├── conftest.py              # Global pytest configuration
+│   ├── pages/                   # Page Object Models
+│   ├── specs/                   # Test specifications
+│   ├── utils/                   # Helper utilities
+│   └── data/                    # Test data files
+├── config/
+│   ├── environments/            # Environment configurations
+│   └── browsers/                # Browser configurations
+├── reports/                     # Test execution reports
+├── logs/                        # Application logs
+├── requirements.txt             # Python dependencies
+└── pytest.ini                  # pytest configuration
+```
+
+## pytest Configuration Excellence
+```python
+# conftest.py - Global configuration
+import pytest
+import os
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from webdriver_manager.chrome import ChromeDriverManager
+
+def pytest_addoption(parser):
+    """Command line options for flexible test execution."""
+    parser.addoption("--browser", action="store", default="chrome")
+    parser.addoption("--headless", action="store_true", default=False)
+    parser.addoption("--env", action="store", default="dev")
+    parser.addoption("--parallel", action="store", default="1")
+
+@pytest.fixture(scope="session")
+def browser_config(request):
+    """Browser configuration based on command line arguments."""
+    return {
+        "browser": request.config.getoption("--browser"),
+        "headless": request.config.getoption("--headless"),
+        "environment": request.config.getoption("--env")
+    }
+```
+
+## Environment Management
+```python
+# Environment-specific configuration loading
+import yaml
+import os
+from typing import Dict, Any
+
+class ConfigManager:
+    """Centralized configuration management."""
+    
+    def __init__(self, environment: str = "dev"):
+        self.environment = environment
+        self.config = self._load_config()
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """Load environment-specific configuration."""
+        config_file = f"config/environments/{self.environment}.yaml"
+        
+        if not os.path.exists(config_file):
+            raise FileNotFoundError(f"Configuration file not found: {config_file}")
+        
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Validate required keys
+        required_keys = ["base_url", "timeouts", "credentials"]
+        for key in required_keys:
+            if key not in config:
+                raise KeyError(f"Missing required configuration: {key}")
+        
+        return config
+    
+    def get(self, key: str, default=None):
+        """Get configuration value with dot notation support."""
+        keys = key.split('.')
+        value = self.config
+        
+        for k in keys:
+            if isinstance(value, dict) and k in value:
+                value = value[k]
+            else:
+                return default
+        
+        return value
+```
+
+## Dependency Management
+```ini
+# requirements.txt - Pinned versions for stability
+selenium==4.15.0
+pytest==7.4.0
+pytest-html==4.1.1
+pytest-xdist==3.3.1
+webdriver-manager==4.0.1
+pyyaml==6.0.1
+allure-pytest==2.13.2
+python-dotenv==1.0.0
+
+# Development dependencies
+black==23.9.1
+flake8==6.1.0
+mypy==1.6.0
+```

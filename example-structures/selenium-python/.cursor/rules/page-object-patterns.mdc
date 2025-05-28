@@ -3,3 +3,212 @@ description:
 globs:
 alwaysApply: false
 ---
+# Page Object Model Excellence
+
+## Advanced POM Architecture
+- **Inheritance Hierarchy**: BasePage class with common functionality
+- **Component Pattern**: Reusable UI components across pages
+- **Fluent Interface**: Method chaining for readable test code
+- **Smart Locators**: Dynamic locator strategies with fallbacks
+
+## Base Page Implementation
+```python
+from typing import Optional, List, Union, Tuple
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
+import logging
+
+logger = logging.getLogger(__name__)
+
+class BasePage:
+    """Enhanced base page with advanced interaction methods."""
+    
+    def __init__(self, driver, timeout: int = 10):
+        self.driver = driver
+        self.wait = WebDriverWait(driver, timeout)
+        self.timeout = timeout
+        self.actions = ActionChains(driver)
+    
+    def find_element_safely(self, locator: Tuple[str, str], timeout: Optional[int] = None) -> Optional[WebElement]:
+        """Find element with comprehensive error handling and retry logic."""
+        timeout = timeout or self.timeout
+        wait = WebDriverWait(self.driver, timeout)
+        
+        try:
+            element = wait.until(EC.presence_of_element_located(locator))
+            logger.debug(f"Element found successfully: {locator}")
+            return element
+        except TimeoutException:
+            logger.warning(f"Element not found within {timeout}s: {locator}")
+            return None
+        except StaleElementReferenceException:
+            logger.warning(f"Stale element detected, retrying: {locator}")
+            return self.find_element_safely(locator, timeout)
+    
+    def click_when_clickable(self, locator: Tuple[str, str], timeout: Optional[int] = None) -> bool:
+        """Click element only when it's clickable with retry logic."""
+        timeout = timeout or self.timeout
+        wait = WebDriverWait(self.driver, timeout)
+        
+        try:
+            element = wait.until(EC.element_to_be_clickable(locator))
+            
+            # Scroll element into view before clicking
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+            
+            # Use Actions for more reliable clicking
+            self.actions.move_to_element(element).click().perform()
+            logger.info(f"Successfully clicked element: {locator}")
+            return True
+        except TimeoutException:
+            logger.error(f"Element not clickable: {locator}")
+            return False
+        except Exception as e:
+            logger.error(f"Click failed for {locator}: {str(e)}")
+            return False
+    
+    def enter_text_safely(self, locator: Tuple[str, str], text: str, 
+                         clear_first: bool = True, validate: bool = True) -> bool:
+        """Enter text with validation and error handling."""
+        element = self.find_element_safely(locator)
+        if not element:
+            return False
+        
+        try:
+            # Scroll to element and focus
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+            element.click()  # Focus the element
+            
+            if clear_first:
+                element.clear()
+            
+            element.send_keys(text)
+            
+            # Verify text was entered correctly if validation is enabled
+            if validate:
+                entered_value = element.get_attribute('value')
+                if entered_value == text:
+                    logger.info(f"Text entered successfully: '{text}' in {locator}")
+                    return True
+                else:
+                    logger.warning(f"Text entry verification failed. Expected: '{text}', Got: '{entered_value}'")
+                    return False
+            
+            logger.info(f"Text entered (no validation): '{text}' in {locator}")
+            return True
+                
+        except Exception as e:
+            logger.error(f"Failed to enter text in {locator}: {str(e)}")
+            return False
+```
+
+## Example Page Implementation
+```python
+class LoginPage(BasePage):
+    """Login page with comprehensive functionality."""
+    
+    def __init__(self, driver):
+        super().__init__(driver)
+        self.url = "/login"
+        
+        # Locators
+        self.email_input = (By.ID, "email")
+        self.password_input = (By.ID, "password")
+        self.login_button = (By.CSS_SELECTOR, "[data-cy=login-button]")
+        self.error_message = (By.CSS_SELECTOR, "[data-cy=error-message]")
+        self.forgot_password_link = (By.CSS_SELECTOR, "[data-cy=forgot-password]")
+        self.remember_me_checkbox = (By.CSS_SELECTOR, "[data-cy=remember-me]")
+    
+    def navigate(self) -> 'LoginPage':
+        """Navigate to login page with fluent interface."""
+        self.driver.get(self.url)
+        self.wait_for_page_load()
+        return self
+    
+    def wait_for_page_load(self) -> bool:
+        """Wait for login page to be fully loaded."""
+        return (self.wait_for_element_visible(self.email_input) and
+                self.wait_for_element_visible(self.password_input))
+    
+    def enter_email(self, email: str) -> 'LoginPage':
+        """Enter email with fluent interface."""
+        self.enter_text_safely(self.email_input, email)
+        return self
+    
+    def enter_password(self, password: str) -> 'LoginPage':
+        """Enter password with fluent interface."""
+        self.enter_text_safely(self.password_input, password)
+        return self
+    
+    def check_remember_me(self) -> 'LoginPage':
+        """Check remember me checkbox."""
+        self.click_when_clickable(self.remember_me_checkbox)
+        return self
+    
+    def click_login(self) -> Union['DashboardPage', 'LoginPage']:
+        """Click login button and return appropriate page object."""
+        if self.click_when_clickable(self.login_button):
+            # Wait for navigation or error
+            if self.wait_for_element_invisible(self.login_button, timeout=5):
+                from pages.dashboard_page import DashboardPage
+                return DashboardPage(self.driver)
+            elif self.is_element_present(self.error_message):
+                return self  # Stay on login page if error
+        return self
+    
+    def login(self, email: str, password: str, remember_me: bool = False) -> Union['DashboardPage', 'LoginPage']:
+        """Complete login flow with method chaining."""
+        login_chain = self.enter_email(email).enter_password(password)
+        
+        if remember_me:
+            login_chain = login_chain.check_remember_me()
+        
+        return login_chain.click_login()
+```
+
+## Component-Based Architecture
+```python
+class BaseComponent:
+    """Base class for reusable UI components."""
+    
+    def __init__(self, driver, root_locator: Tuple[str, str]):
+        self.driver = driver
+        self.root_locator = root_locator
+        self.base_page = BasePage(driver)
+    
+    def is_displayed(self) -> bool:
+        """Check if component is displayed."""
+        return self.base_page.wait_for_element_visible(self.root_locator, timeout=5)
+    
+    def wait_for_component(self, timeout: int = 10) -> bool:
+        """Wait for component to be visible."""
+        return self.base_page.wait_for_element_visible(self.root_locator, timeout)
+
+class NavigationComponent(BaseComponent):
+    """Reusable navigation component."""
+    
+    def __init__(self, driver):
+        super().__init__(driver, (By.CSS_SELECTOR, "[data-cy=main-navigation]"))
+        self.menu_items = (By.CSS_SELECTOR, "[data-cy=nav-item]")
+        self.user_menu = (By.CSS_SELECTOR, "[data-cy=user-menu]")
+        self.logout_button = (By.CSS_SELECTOR, "[data-cy=logout]")
+    
+    def navigate_to(self, menu_name: str) -> bool:
+        """Navigate to specific menu item."""
+        if not self.is_displayed():
+            logger.error("Navigation component not displayed")
+            return False
+        
+        menu_locator = (By.CSS_SELECTOR, f"[data-cy=nav-{menu_name.lower()}]")
+        return self.base_page.click_when_clickable(menu_locator)
+    
+    def logout(self) -> bool:
+        """Perform logout action."""
+        if self.base_page.click_when_clickable(self.user_menu):
+            return self.base_page.click_when_clickable(self.logout_button)
+        return False
+```
