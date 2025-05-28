@@ -1,5 +1,270 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# Selenium Python Test Patterns
+
+## Advanced Test Structure
+- **Arrange-Act-Assert Pattern**: Clear test structure with setup, action, and verification
+- **Data-Driven Testing**: Parametrized tests with comprehensive data coverage
+- **Test Categorization**: Smart use of pytest markers for test organization
+- **Robust Error Handling**: Graceful failure management and recovery
+
+## Data-Driven Test Excellence
+```python
+import pytest
+from pages.login_page import LoginPage
+from pages.dashboard_page import DashboardPage
+
+class TestUserAuthentication:
+    """Comprehensive user authentication test suite."""
+    
+    @pytest.mark.smoke
+    @pytest.mark.parametrize("user_type,expected_dashboard", [
+        ("admin", "admin-dashboard"),
+        ("manager", "manager-dashboard"),
+        ("employee", "employee-dashboard"),
+        ("guest", "guest-dashboard")
+    ])
+    def test_role_based_dashboard_access(self, driver, test_data, user_type, expected_dashboard):
+        """Test that users see appropriate dashboard based on their role."""
+        # Arrange
+        user_credentials = test_data.get_user_credentials(user_type)
+        login_page = LoginPage(driver)
+        
+        # Act
+        dashboard_page = login_page.navigate() \
+                                 .login(user_credentials['email'], user_credentials['password'])
+        
+        # Assert
+        assert dashboard_page.is_loaded(), f"Dashboard not loaded for {user_type}"
+        assert dashboard_page.get_dashboard_type() == expected_dashboard, \
+               f"Wrong dashboard type for {user_type}"
+        assert dashboard_page.get_user_role() == user_type.upper(), \
+               f"User role not displayed correctly"
+    
+    @pytest.mark.regression
+    @pytest.mark.parametrize("invalid_credential", [
+        {"email": "invalid@example.com", "password": "validPassword123", "error": "Invalid email"},
+        {"email": "valid@example.com", "password": "wrongPassword", "error": "Invalid password"},
+        {"email": "", "password": "validPassword123", "error": "Email is required"},
+        {"email": "valid@example.com", "password": "", "error": "Password is required"},
+        {"email": "notanemail", "password": "validPassword123", "error": "Invalid email format"}
+    ])
+    def test_login_validation_errors(self, driver, invalid_credential):
+        """Test comprehensive login validation error scenarios."""
+        # Arrange
+        login_page = LoginPage(driver)
+        
+        # Act
+        result_page = login_page.navigate() \
+                               .login(invalid_credential['email'], invalid_credential['password'])
+        
+        # Assert
+        assert isinstance(result_page, LoginPage), "Should remain on login page for invalid credentials"
+        assert result_page.get_error_message() == invalid_credential['error'], \
+               f"Expected error: {invalid_credential['error']}"
+        assert result_page.is_password_field_cleared(), "Password field should be cleared after error"
+```
+
+## Advanced Test Fixtures
+```python
+import pytest
+import json
+from typing import Dict, Any
+from selenium.webdriver.support.ui import WebDriverWait
+
+@pytest.fixture(scope="session")
+def test_data():
+    """Load test data from JSON files."""
+    class TestDataManager:
+        def __init__(self):
+            self.users_data = self._load_json("test_data/users.json")
+            self.test_scenarios = self._load_json("test_data/scenarios.json")
+        
+        def _load_json(self, file_path: str) -> Dict[str, Any]:
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        
+        def get_user_credentials(self, user_type: str) -> Dict[str, str]:
+            return self.users_data.get(user_type, {})
+        
+        def get_test_scenario(self, scenario_name: str) -> Dict[str, Any]:
+            return self.test_scenarios.get(scenario_name, {})
+    
+    return TestDataManager()
+
+@pytest.fixture(scope="function")
+def clean_environment(driver):
+    """Ensure clean test environment before each test."""
+    # Clear browser data
+    driver.delete_all_cookies()
+    driver.execute_script("localStorage.clear();")
+    driver.execute_script("sessionStorage.clear();")
+    
+    # Navigate to base URL
+    driver.get("https://app.example.com")
+    
+    yield
+    
+    # Cleanup after test
+    try:
+        # Take screenshot if test failed
+        if hasattr(driver, '_test_failed') and driver._test_failed:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            driver.save_screenshot(f"screenshots/failed_test_{timestamp}.png")
+    except Exception as e:
+        logger.warning(f"Cleanup failed: {str(e)}")
+
+@pytest.fixture(scope="function")
+def wait_helper(driver):
+    """Provide advanced waiting utilities."""
+    class WaitHelper:
+        def __init__(self, driver, default_timeout=10):
+            self.driver = driver
+            self.wait = WebDriverWait(driver, default_timeout)
+        
+        def wait_for_page_transition(self, expected_url_contains: str, timeout: int = 15):
+            """Wait for page URL to change to expected pattern."""
+            return self.wait.until(
+                lambda d: expected_url_contains in d.current_url,
+                message=f"Page did not transition to URL containing: {expected_url_contains}"
+            )
+        
+        def wait_for_ajax_complete(self, timeout: int = 30):
+            """Wait for all AJAX requests to complete."""
+            return self.wait.until(
+                lambda d: d.execute_script("return jQuery.active == 0"),
+                message="AJAX requests did not complete"
+            )
+        
+        def wait_for_custom_condition(self, condition_script: str, timeout: int = 10):
+            """Wait for custom JavaScript condition to be true."""
+            return self.wait.until(
+                lambda d: d.execute_script(f"return {condition_script}"),
+                message=f"Custom condition not met: {condition_script}"
+            )
+    
+    return WaitHelper(driver)
+```
+
+## Error Handling and Recovery
+```python
+class TestErrorHandling:
+    """Test error scenarios and recovery mechanisms."""
+    
+    @pytest.mark.error_handling
+    def test_network_error_recovery(self, driver, mock_network_error):
+        """Test application behavior during network errors."""
+        # Arrange
+        login_page = LoginPage(driver)
+        
+        # Act - Simulate network error during login
+        with mock_network_error:
+            result = login_page.navigate().attempt_login("user@example.com", "password123")
+        
+        # Assert
+        assert login_page.is_network_error_displayed(), "Network error message should be visible"
+        assert login_page.is_retry_button_visible(), "Retry button should be available"
+        
+        # Test recovery
+        login_page.click_retry_button()
+        dashboard = login_page.wait_for_successful_login()
+        assert dashboard.is_loaded(), "Should successfully login after retry"
+    
+    @pytest.mark.error_handling
+    def test_session_timeout_handling(self, driver, simulate_session_timeout):
+        """Test session timeout detection and handling."""
+        # Arrange
+        dashboard = DashboardPage(driver)
+        dashboard.navigate_and_login()
+        
+        # Act - Simulate session timeout
+        simulate_session_timeout()
+        dashboard.perform_action_requiring_auth()
+        
+        # Assert
+        assert dashboard.is_session_expired_modal_visible(), "Session expired modal should appear"
+        
+        # Test re-authentication
+        dashboard.click_reauth_button()
+        login_page = LoginPage(driver)
+        assert login_page.is_loaded(), "Should redirect to login page"
+    
+    @pytest.mark.flaky(reruns=3, reruns_delay=2)
+    def test_flaky_operation_with_retry(self, driver):
+        """Test flaky operations with automatic retry mechanism."""
+        dashboard = DashboardPage(driver)
+        dashboard.navigate_and_login()
+        
+        # This operation might fail due to timing issues
+        success = dashboard.perform_complex_operation_with_retry(max_attempts=3)
+        assert success, "Complex operation should eventually succeed with retries"
+```
+
+## Performance Testing
+```python
+import time
+from datetime import datetime
+
+class TestPerformance:
+    """Performance-focused test scenarios."""
+    
+    @pytest.mark.performance
+    def test_page_load_performance(self, driver):
+        """Test page load times meet performance requirements."""
+        # Measure navigation time
+        start_time = time.time()
+        
+        login_page = LoginPage(driver)
+        login_page.navigate()
+        
+        # Wait for page to be fully loaded
+        driver.execute_script("return document.readyState") == "complete"
+        
+        load_time = time.time() - start_time
+        
+        # Assert performance requirement
+        assert load_time < 3.0, f"Page load time {load_time:.2f}s exceeds 3s requirement"
+        
+        # Log performance metrics
+        logger.info(f"Login page load time: {load_time:.2f}s")
+    
+    @pytest.mark.performance
+    def test_form_submission_performance(self, driver, performance_monitor):
+        """Test form submission response times."""
+        login_page = LoginPage(driver)
+        login_page.navigate()
+        
+        # Measure login submission time
+        with performance_monitor.measure("login_submission"):
+            dashboard = login_page.login("user@example.com", "password123")
+        
+        submission_time = performance_monitor.get_last_measurement("login_submission")
+        
+        assert submission_time < 2.0, f"Login submission {submission_time:.2f}s exceeds 2s requirement"
+        assert dashboard.is_loaded(), "Dashboard should load successfully"
+    
+    @pytest.mark.performance
+    def test_concurrent_user_simulation(self, driver_pool):
+        """Simulate multiple concurrent users."""
+        import concurrent.futures
+        
+        def simulate_user_session(driver_instance):
+            login_page = LoginPage(driver_instance)
+            dashboard = login_page.navigate().login("user@example.com", "password123")
+            
+            # Simulate user actions
+            dashboard.perform_typical_user_workflow()
+            return dashboard.is_workflow_completed()
+        
+        # Run concurrent sessions
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(simulate_user_session, driver) 
+                      for driver in driver_pool]
+            
+            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+        
+        # All sessions should complete successfully
+        assert all(results), "All concurrent user sessions should complete successfully"

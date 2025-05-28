@@ -1,5 +1,339 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# Cypress API Testing Excellence
+
+## Network Interception Mastery
+- **Request/Response Mocking**: Control external API responses for reliable testing
+- **Network Monitoring**: Track and validate API calls during user interactions
+- **Error Simulation**: Test error handling and edge cases
+- **Performance Testing**: Monitor response times and optimize user experience
+
+## Advanced API Interception
+```javascript
+// ✅ Comprehensive API interception setup
+describe('API Integration Tests', () => {
+  beforeEach(() => {
+    // Set up common API routes
+    cy.intercept('GET', '/api/users*', { fixture: 'users.json' }).as('getUsers')
+    cy.intercept('POST', '/api/users', { fixture: 'user-created.json' }).as('createUser')
+    cy.intercept('PUT', '/api/users/*', { fixture: 'user-updated.json' }).as('updateUser')
+    cy.intercept('DELETE', '/api/users/*', { statusCode: 204 }).as('deleteUser')
+  })
+
+  it('should handle complete user CRUD operations', () => {
+    // Visit page and wait for initial data load
+    cy.visit('/users')
+    cy.wait('@getUsers').then((interception) => {
+      expect(interception.response.statusCode).to.equal(200)
+      expect(interception.response.body).to.have.property('users')
+    })
+
+    // Create new user
+    cy.get('[data-cy=add-user-button]').click()
+    cy.get('[data-cy=user-form]').within(() => {
+      cy.get('[data-cy=first-name]').type('John')
+      cy.get('[data-cy=last-name]').type('Doe')
+      cy.get('[data-cy=email]').type('john.doe@example.com')
+      cy.get('[data-cy=submit-button]').click()
+    })
+
+    cy.wait('@createUser').then((interception) => {
+      expect(interception.request.body).to.deep.include({
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john.doe@example.com'
+      })
+      expect(interception.response.statusCode).to.equal(201)
+    })
+
+    // Verify user appears in list
+    cy.get('[data-cy=user-list]')
+      .should('contain.text', 'John Doe')
+      .and('contain.text', 'john.doe@example.com')
+  })
+})
+```
+
+## Dynamic Response Generation
+```javascript
+// ✅ Smart response generation based on request
+cy.intercept('GET', '/api/users/*', (req) => {
+  const userId = req.url.split('/').pop()
+  
+  // Generate different responses based on user ID
+  if (userId === '1') {
+    req.reply({ fixture: 'admin-user.json' })
+  } else if (userId === '404') {
+    req.reply({ statusCode: 404, body: { error: 'User not found' } })
+  } else {
+    req.reply({ fixture: 'regular-user.json' })
+  }
+}).as('getUser')
+
+// ✅ Conditional responses based on request data
+cy.intercept('POST', '/api/login', (req) => {
+  const { email, password } = req.body
+  
+  if (email === 'admin@example.com' && password === 'admin123') {
+    req.reply({ fixture: 'admin-login-success.json' })
+  } else if (email === 'user@example.com' && password === 'user123') {
+    req.reply({ fixture: 'user-login-success.json' })
+  } else {
+    req.reply({ 
+      statusCode: 401, 
+      body: { error: 'Invalid credentials' } 
+    })
+  }
+}).as('login')
+
+// ✅ Delayed responses for testing loading states
+cy.intercept('GET', '/api/heavy-data', (req) => {
+  req.reply({ 
+    fixture: 'large-dataset.json',
+    delay: 2000 // 2 second delay
+  })
+}).as('heavyData')
+
+cy.visit('/dashboard')
+cy.get('[data-cy=loading-spinner]').should('be.visible')
+cy.wait('@heavyData')
+cy.get('[data-cy=loading-spinner]').should('not.exist')
+cy.get('[data-cy=data-table]').should('be.visible')
+```
+
+## Error Handling and Edge Cases
+```javascript
+// ✅ Network error simulation
+describe('Network Error Handling', () => {
+  it('should handle server errors gracefully', () => {
+    // Simulate 500 server error
+    cy.intercept('POST', '/api/submit', {
+      statusCode: 500,
+      body: { error: 'Internal server error' }
+    }).as('serverError')
+
+    cy.visit('/form-page')
+    cy.get('[data-cy=submit-form]').submit()
+    
+    cy.wait('@serverError')
+    cy.get('[data-cy=error-notification]')
+      .should('be.visible')
+      .and('contain.text', 'Something went wrong')
+  })
+
+  it('should handle network connectivity issues', () => {
+    // Force network error
+    cy.intercept('GET', '/api/data', { forceNetworkError: true }).as('networkError')
+
+    cy.visit('/dashboard')
+    cy.wait('@networkError')
+    
+    cy.get('[data-cy=offline-indicator]').should('be.visible')
+    cy.get('[data-cy=retry-button]').should('be.visible')
+  })
+
+  it('should handle timeout scenarios', () => {
+    // Simulate very slow response
+    cy.intercept('GET', '/api/slow-endpoint', (req) => {
+      req.reply({ 
+        fixture: 'data.json',
+        delay: 30000 // 30 second delay
+      })
+    }).as('slowResponse')
+
+    cy.visit('/page-with-timeout')
+    
+    // Should show timeout message
+    cy.get('[data-cy=timeout-message]', { timeout: 35000 })
+      .should('be.visible')
+  })
+})
+```
+
+## API State Management Testing
+```javascript
+// ✅ Complex state management testing
+describe('API State Synchronization', () => {
+  beforeEach(() => {
+    // Set up realistic API responses
+    cy.fixture('shopping-cart.json').as('cartData')
+    cy.fixture('products.json').as('productsData')
+  })
+
+  it('should maintain cart state across page navigation', () => {
+    // Initial cart state
+    cy.intercept('GET', '/api/cart', { body: { items: [], total: 0 } }).as('emptyCart')
+    
+    cy.visit('/shop')
+    cy.wait('@emptyCart')
+
+    // Add item to cart
+    cy.intercept('POST', '/api/cart/items', (req) => {
+      const newItem = req.body
+      req.reply({ 
+        statusCode: 201,
+        body: {
+          items: [newItem],
+          total: newItem.price * newItem.quantity
+        }
+      })
+    }).as('addToCart')
+
+    cy.get('[data-cy=product-1] [data-cy=add-to-cart]').click()
+    cy.wait('@addToCart')
+
+    // Verify cart updates
+    cy.get('[data-cy=cart-count]').should('contain.text', '1')
+    cy.get('[data-cy=cart-total]').should('contain.text', '$29.99')
+
+    // Navigate to different page
+    cy.intercept('GET', '/api/cart', '@cartData').as('getCart')
+    cy.visit('/profile')
+    cy.wait('@getCart')
+
+    // Verify cart state persists
+    cy.get('[data-cy=cart-count]').should('contain.text', '1')
+  })
+})
+```
+
+## Real-time Features Testing
+```javascript
+// ✅ WebSocket and real-time feature testing
+describe('Real-time Features', () => {
+  it('should handle live notifications', () => {
+    // Mock WebSocket connection
+    cy.visit('/dashboard', {
+      onBeforeLoad: (win) => {
+        // Mock WebSocket
+        const mockSocket = {
+          send: cy.stub(),
+          close: cy.stub(),
+          addEventListener: cy.stub()
+        }
+        
+        win.WebSocket = function() {
+          return mockSocket
+        }
+
+        // Simulate incoming notification
+        setTimeout(() => {
+          const notificationEvent = new MessageEvent('message', {
+            data: JSON.stringify({
+              type: 'notification',
+              message: 'New message received',
+              timestamp: Date.now()
+            })
+          })
+          
+          // Trigger event handler if it exists
+          if (mockSocket.addEventListener.lastCall) {
+            const eventHandler = mockSocket.addEventListener.lastCall.args[1]
+            eventHandler(notificationEvent)
+          }
+        }, 1000)
+      }
+    })
+
+    // Verify notification appears
+    cy.get('[data-cy=notification-toast]', { timeout: 5000 })
+      .should('be.visible')
+      .and('contain.text', 'New message received')
+  })
+
+  it('should handle live data updates', () => {
+    let updateCount = 0
+    
+    cy.intercept('GET', '/api/live-data', (req) => {
+      updateCount++
+      req.reply({
+        body: {
+          value: `Live data update ${updateCount}`,
+          timestamp: Date.now()
+        }
+      })
+    }).as('liveData')
+
+    cy.visit('/live-dashboard')
+    cy.wait('@liveData')
+
+    // Initial data
+    cy.get('[data-cy=live-value]')
+      .should('contain.text', 'Live data update 1')
+
+    // Simulate periodic updates
+    cy.clock()
+    cy.tick(5000) // Fast-forward 5 seconds
+    
+    cy.wait('@liveData')
+    cy.get('[data-cy=live-value]')
+      .should('contain.text', 'Live data update 2')
+  })
+})
+```
+
+## Custom API Commands
+```javascript
+// ✅ Reusable API testing commands (in commands.js)
+Cypress.Commands.add('mockApiAuth', (userType = 'user') => {
+  const authData = {
+    user: { fixture: 'auth-user.json' },
+    admin: { fixture: 'auth-admin.json' },
+    guest: { statusCode: 401, body: { error: 'Unauthorized' } }
+  }
+
+  cy.intercept('POST', '/api/auth/login', authData[userType]).as('login')
+  cy.intercept('GET', '/api/auth/me', authData[userType]).as('getCurrentUser')
+  cy.intercept('POST', '/api/auth/refresh', authData[userType]).as('refreshToken')
+})
+
+Cypress.Commands.add('mockCrudApi', (resource, data = {}) => {
+  const baseUrl = `/api/${resource}`
+  
+  cy.intercept('GET', `${baseUrl}*`, data.list || { fixture: `${resource}-list.json` }).as(`get${resource}`)
+  cy.intercept('POST', baseUrl, data.create || { fixture: `${resource}-created.json` }).as(`create${resource}`)
+  cy.intercept('PUT', `${baseUrl}/*`, data.update || { fixture: `${resource}-updated.json` }).as(`update${resource}`)
+  cy.intercept('DELETE', `${baseUrl}/*`, data.delete || { statusCode: 204 }).as(`delete${resource}`)
+})
+
+Cypress.Commands.add('waitForApiCall', (alias, expectedData = {}) => {
+  cy.wait(alias).then((interception) => {
+    expect(interception.response.statusCode).to.be.oneOf([200, 201, 204])
+    
+    if (expectedData.requestBody) {
+      expect(interception.request.body).to.deep.include(expectedData.requestBody)
+    }
+    
+    if (expectedData.responseBody) {
+      expect(interception.response.body).to.deep.include(expectedData.responseBody)
+    }
+  })
+})
+
+// Usage in tests
+describe('Using Custom API Commands', () => {
+  beforeEach(() => {
+    cy.mockApiAuth('admin')
+    cy.mockCrudApi('users')
+  })
+
+  it('should perform user management operations', () => {
+    cy.visit('/admin/users')
+    cy.waitForApiCall('@getusers')
+
+    // Create user
+    cy.get('[data-cy=create-user]').click()
+    cy.get('[data-cy=user-form]').within(() => {
+      cy.get('[data-cy=name]').type('New User')
+      cy.get('[data-cy=email]').type('new@example.com')
+      cy.get('[data-cy=submit]').click()
+    })
+
+    cy.waitForApiCall('@createusers', {
+      requestBody: { name: 'New User', email: 'new@example.com' }
+    })
+  })
+})

@@ -310,30 +310,31 @@ mkdir -p .cursor/rules/{core,frameworks,templates,advanced}
 git clone https://github.com/your-org/awesome-cursor-rules
 
 # Set up Selenium Python automation
-cp -r frameworks/selenium-python/.cursor/rules/* .cursor/rules/
+cp -r example-structures/selenium-python/.cursor/rules/* .cursor/rules/
 
 # Add Cypress for E2E testing
-cp -r frameworks/cypress/.cursor/rules/* e2e/.cursor/rules/
+cp -r example-structures/cypress/.cursor/rules/* e2e/.cursor/rules/
 
-# Include API testing patterns
-cp -r frameworks/api-testing/.cursor/rules/* api-tests/.cursor/rules/
+# Include React TypeScript patterns
+cp -r example-structures/react-typescript/.cursor/rules/* frontend/.cursor/rules/
 ```
 
 ### For Web Development Teams
 ```bash
 # Full-stack development setup
-cp -r frameworks/react/.cursor/rules/* frontend/.cursor/rules/
-cp -r frameworks/nodejs-api/.cursor/rules/* backend/.cursor/rules/
-cp -r examples/team-standards/.cursor/rules/* .cursor/rules/
+cp -r example-structures/react-typescript/.cursor/rules/* frontend/.cursor/rules/
+cp -r example-structures/selenium-python/.cursor/rules/* backend-tests/.cursor/rules/
+cp -r example-structures/cypress/.cursor/rules/* e2e-tests/.cursor/rules/
 ```
 
 ### For Enterprise Organizations
 ```bash
-# Large-scale monorepo setup
-cp -r examples/monorepo-setup/* ./
-# Customize global standards
-# Set up team-specific rules
-# Integrate with CI/CD pipelines
+# Large-scale monorepo setup - use enterprise patterns from README examples
+mkdir -p .cursor/rules
+# Copy relevant rules based on your tech stack
+# Customize global standards for your organization
+# Set up team-specific rules in subdirectories
+# Integrate with CI/CD pipelines for consistency
 ```
 
 ## 🌟 Community Showcase
@@ -413,6 +414,43 @@ Infrastructure that grows from individual projects to enterprise-scale monorepos
 
 > 💡 **Remember**: The transition from `.cursorrules` to Cursor Rules isn't just about new syntax—it's about unlocking the full potential of AI-assisted development for your team.
 
-**[Get Started with Migration Guide →](./MIGRATION_GUIDE.md)**  
-**[Explore Framework Examples →](./frameworks/)**  
-**[View Enterprise Setup →](./examples/monorepo-setup/)** 
+## 📚 Explore Our Resources
+
+### 🎯 **Quick Start Guides**
+- **[📋 Structure Overview](./example-structures/STRUCTURE-OVERVIEW.md)** - Complete guide to modern flat structure organization
+- **[🔄 Before & After Migration](./legacy-migration/BEFORE-AND-AFTER.md)** - Real-world transformation examples
+
+### 🛠️ **Framework Examples**
+- **[🐍 Selenium Python](./example-structures/selenium-python/.cursor/rules/)** - Advanced test automation patterns
+- **[🌐 Cypress Testing](./example-structures/cypress/.cursor/rules/)** - E2E testing excellence
+- **[⚛️ React TypeScript](./example-structures/react-typescript/.cursor/rules/)** - Modern component development
+
+### 🎓 **Learning Resources**
+- **[📖 Official Documentation](https://docs.cursor.com/context/rules)** - Cursor Rules comprehensive guide
+- **[🎥 Video Tutorials](https://youtube.com/cursor-rules)** - Step-by-step migration walkthrough
+- **[💬 Community Forum](https://forum.cursor.com)** - Connect with other developers
+
+### 🚀 **Advanced Topics**
+- **[🏢 Enterprise Patterns](#-enterprise-scale-examples)** - Large-scale monorepo organization
+- **[📈 Migration Strategy](#-migration-strategy)** - Four-phase transformation approach
+- **[🌟 Community Showcase](#-community-showcase)** - Success stories and best practices
+
+---
+
+## 💡 **Pro Tips for Success**
+
+### 🎯 **Start Small, Think Big**
+Begin with one framework example, then expand to your full tech stack
+
+### 🤝 **Involve Your Team**
+Collaborative rule creation ensures buy-in and better adoption
+
+### 📊 **Measure Impact**
+Track code review time, onboarding speed, and quality metrics
+
+### 🔄 **Iterate & Improve**
+Regular rule updates keep pace with evolving best practices
+
+---
+
+**Ready to revolutionize your development experience? Pick a framework above and start your transformation today!** 🚀 

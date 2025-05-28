@@ -1,5 +1,239 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# Cypress Testing Fundamentals
+
+## Core Testing Principles
+- **Reliable Selectors**: Use data attributes for stable element identification
+- **Smart Waits**: Leverage Cypress's automatic waiting capabilities
+- **Test Isolation**: Each test should be independent and repeatable
+- **Clear Assertions**: Write descriptive assertions that explain expected behavior
+
+## Element Selection Excellence
+```javascript
+// ✅ Best Practice - Use data-cy attributes
+cy.get('[data-cy=login-button]').click()
+cy.get('[data-cy=username-input]').type('user@example.com')
+cy.get('[data-cy=password-input]').type('password123')
+
+// ✅ Alternative - Use data-testid
+cy.get('[data-testid=submit-form]').click()
+
+// ✅ Accessible selectors
+cy.get('[aria-label="Close dialog"]').click()
+cy.get('button').contains('Save Changes').click()
+
+// ❌ Avoid - Brittle CSS selectors
+cy.get('.btn-primary.large-button:nth-child(2)').click() // Fragile
+cy.get('#dynamic-id-12345').type('text') // IDs may change
+```
+
+## Smart Waiting Strategies
+```javascript
+// ✅ Wait for element to be visible and interactable
+cy.get('[data-cy=submit-button]')
+  .should('be.visible')
+  .and('not.be.disabled')
+  .click()
+
+// ✅ Wait for specific content
+cy.get('[data-cy=user-name]')
+  .should('contain.text', 'John Doe')
+
+// ✅ Wait for element to disappear (loading states)
+cy.get('[data-cy=loading-spinner]').should('not.exist')
+
+// ✅ Wait for API calls to complete
+cy.intercept('POST', '/api/users').as('createUser')
+cy.get('[data-cy=create-user-form]').submit()
+cy.wait('@createUser').then((interception) => {
+  expect(interception.response.statusCode).to.equal(201)
+})
+
+// ✅ Custom wait conditions
+cy.get('[data-cy=dynamic-content]').should(($el) => {
+  expect($el).to.have.length.at.least(1)
+  expect($el.text()).to.match(/Expected Pattern/)
+})
+```
+
+## Test Structure and Organization
+```javascript
+describe('User Authentication Flow', () => {
+  beforeEach(() => {
+    // Set up consistent test state
+    cy.visit('/login')
+    cy.clearLocalStorage()
+    cy.clearCookies()
+  })
+
+  context('Valid Login Scenarios', () => {
+    it('should successfully log in with valid credentials', () => {
+      // Arrange
+      const userData = {
+        email: 'test@example.com',
+        password: 'validPassword123'
+      }
+
+      // Act
+      cy.get('[data-cy=email-input]').type(userData.email)
+      cy.get('[data-cy=password-input]').type(userData.password)
+      cy.get('[data-cy=login-button]').click()
+
+      // Assert
+      cy.url().should('include', '/dashboard')
+      cy.get('[data-cy=welcome-message]')
+        .should('be.visible')
+        .and('contain.text', 'Welcome back!')
+      
+      // Verify user data is loaded
+      cy.get('[data-cy=user-profile]')
+        .should('contain.text', userData.email)
+    })
+
+    it('should remember user when "Remember me" is checked', () => {
+      cy.get('[data-cy=email-input]').type('test@example.com')
+      cy.get('[data-cy=password-input]').type('password123')
+      cy.get('[data-cy=remember-me-checkbox]').check()
+      cy.get('[data-cy=login-button]').click()
+
+      // Verify login success
+      cy.url().should('include', '/dashboard')
+
+      // Simulate browser restart by clearing session
+      cy.clearCookies({ domain: null })
+      cy.visit('/login')
+
+      // Verify user is still remembered
+      cy.get('[data-cy=email-input]')
+        .should('have.value', 'test@example.com')
+    })
+  })
+
+  context('Invalid Login Scenarios', () => {
+    it('should display error for invalid credentials', () => {
+      cy.get('[data-cy=email-input]').type('invalid@example.com')
+      cy.get('[data-cy=password-input]').type('wrongPassword')
+      cy.get('[data-cy=login-button]').click()
+
+      // Verify error handling
+      cy.get('[data-cy=error-message]')
+        .should('be.visible')
+        .and('contain.text', 'Invalid credentials')
+      
+      // Verify user stays on login page
+      cy.url().should('include', '/login')
+      
+      // Verify form state
+      cy.get('[data-cy=password-input]').should('have.value', '')
+      cy.get('[data-cy=email-input]').should('have.value', 'invalid@example.com')
+    })
+
+    it('should validate required fields', () => {
+      // Test empty form submission
+      cy.get('[data-cy=login-button]').click()
+
+      cy.get('[data-cy=email-error]')
+        .should('be.visible')
+        .and('contain.text', 'Email is required')
+
+      cy.get('[data-cy=password-error]')
+        .should('be.visible')
+        .and('contain.text', 'Password is required')
+    })
+  })
+})
+```
+
+## Advanced Assertions
+```javascript
+// ✅ Multiple assertions in sequence
+cy.get('[data-cy=product-card]')
+  .should('be.visible')
+  .and('contain.text', 'Product Name')
+  .and('have.class', 'available')
+  .find('[data-cy=price]')
+  .should('contain.text', '$29.99')
+
+// ✅ Custom assertion functions
+cy.get('[data-cy=user-list]').should(($list) => {
+  expect($list).to.have.length.at.least(1)
+  expect($list.find('[data-cy=user-item]')).to.have.length.at.least(5)
+  
+  // Verify each user item has required elements
+  $list.find('[data-cy=user-item]').each((index, item) => {
+    expect(Cypress.$(item).find('[data-cy=user-name]')).to.exist
+    expect(Cypress.$(item).find('[data-cy=user-email]')).to.exist
+  })
+})
+
+// ✅ Conditional assertions
+cy.get('body').then(($body) => {
+  if ($body.find('[data-cy=modal]').length > 0) {
+    cy.get('[data-cy=modal-close]').click()
+  }
+  
+  cy.get('[data-cy=main-content]').should('be.visible')
+})
+
+// ✅ Retry assertions with custom timeout
+cy.get('[data-cy=dynamic-content]', { timeout: 15000 })
+  .should('exist')
+  .and('not.be.empty')
+```
+
+## Test Data Management
+```javascript
+// ✅ Fixtures for test data
+cy.fixture('users.json').then((users) => {
+  const testUser = users.validUser
+  
+  cy.get('[data-cy=email-input]').type(testUser.email)
+  cy.get('[data-cy=password-input]').type(testUser.password)
+})
+
+// ✅ Dynamic test data generation
+const generateTestUser = () => ({
+  email: `test+${Date.now()}@example.com`,
+  password: `testPass${Math.random().toString(36).substring(7)}`,
+  firstName: 'Test',
+  lastName: 'User'
+})
+
+// ✅ Environment-specific data
+const getApiUrl = () => {
+  const env = Cypress.env('environment') || 'dev'
+  const urls = {
+    dev: 'https://api-dev.example.com',
+    staging: 'https://api-staging.example.com',
+    prod: 'https://api.example.com'
+  }
+  return urls[env]
+}
+```
+
+## Performance Considerations
+```javascript
+// ✅ Efficient element queries
+cy.get('[data-cy=main-container]').within(() => {
+  // Scope queries to container for better performance
+  cy.get('[data-cy=search-input]').type('test query')
+  cy.get('[data-cy=search-button]').click()
+  cy.get('[data-cy=results-list]').should('exist')
+})
+
+// ✅ Minimize unnecessary operations
+cy.visit('/dashboard', {
+  onBeforeLoad: (win) => {
+    // Disable analytics to speed up tests
+    win.analytics = { track: () => {} }
+  }
+})
+
+// ✅ Use aliases to avoid re-querying
+cy.get('[data-cy=complex-form]').as('mainForm')
+cy.get('@mainForm').find('[data-cy=input-field]').type('value')
+cy.get('@mainForm').find('[data-cy=submit-button]').click()
+```
