@@ -1,0 +1,421 @@
+---
+description: Jest testing framework architecture and best practices
+globs: ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts", "**/jest.config.js", "**/jest.config.ts"]
+alwaysApply: true
+---
+
+# Jest Testing Framework Architecture
+
+## Core Principles
+
+### Framework Foundation
+- **Jest as Primary Framework**: Use Jest for unit, integration, and snapshot testing
+- **TypeScript Support**: Leverage ts-jest for TypeScript projects
+- **Modular Test Structure**: Organize tests by feature or component
+- **Clear Naming**: Use descriptive test names that explain behavior
+
+## Project Structure
+
+```
+project/
+├── src/
+│   ├── components/
+│   │   ├── Button.ts
+│   │   └── Button.test.ts
+│   ├── services/
+│   │   ├── api.ts
+│   │   └── api.test.ts
+│   └── utils/
+│       ├── helpers.ts
+│       └── helpers.test.ts
+├── __tests__/
+│   ├── integration/
+│   └── e2e/
+├── __mocks__/
+│   ├── fileMock.js
+│   └── styleMock.js
+├── jest.config.js
+└── jest.setup.js
+```
+
+## Test File Organization
+
+### Naming Conventions
+```javascript
+// ✅ Good
+Button.test.ts          // Component tests
+userService.test.ts     // Service tests
+formatDate.test.ts      // Utility tests
+
+// ❌ Avoid
+Button.spec.ts          // Use .test.ts for consistency
+test_button.ts          // Use camelCase, not snake_case
+ButtonTest.ts           // Don't capitalize Test
+```
+
+### Test Structure Pattern (AAA Pattern)
+```javascript
+describe('ComponentName or FunctionName', () => {
+  // Arrange - Setup
+  beforeEach(() => {
+    // Common setup
+  });
+
+  afterEach(() => {
+    // Cleanup
+  });
+
+  test('should describe expected behavior', () => {
+    // Arrange - Prepare test data
+    const input = 'test';
+
+    // Act - Execute the code
+    const result = functionUnderTest(input);
+
+    // Assert - Verify results
+    expect(result).toBe('expected');
+  });
+});
+```
+
+## Best Practices
+
+### 1. Descriptive Test Names
+```javascript
+// ✅ Good - Behavior-driven descriptions
+test('should return user data when API call succeeds', () => {});
+test('should throw error when user is not found', () => {});
+test('should disable button when form is invalid', () => {});
+
+// ❌ Avoid - Vague descriptions
+test('works correctly', () => {});
+test('test 1', () => {});
+test('returns data', () => {});
+```
+
+### 2. Group Related Tests
+```javascript
+describe('UserService', () => {
+  describe('getUser', () => {
+    test('should return user when found', () => {});
+    test('should return null when not found', () => {});
+    test('should handle network errors', () => {});
+  });
+
+  describe('createUser', () => {
+    test('should create user with valid data', () => {});
+    test('should validate email format', () => {});
+    test('should reject duplicate emails', () => {});
+  });
+});
+```
+
+### 3. Use Setup and Teardown Hooks
+```javascript
+describe('Database operations', () => {
+  let db;
+
+  // Runs once before all tests
+  beforeAll(async () => {
+    db = await connectDatabase();
+  });
+
+  // Runs before each test
+  beforeEach(async () => {
+    await db.clear();
+  });
+
+  // Runs after each test
+  afterEach(async () => {
+    await db.cleanup();
+  });
+
+  // Runs once after all tests
+  afterAll(async () => {
+    await db.disconnect();
+  });
+
+  test('should save data', () => {});
+});
+```
+
+### 4. Avoid Test Interdependence
+```javascript
+// ✅ Good - Each test is independent
+describe('Counter', () => {
+  test('should start at 0', () => {
+    const counter = new Counter();
+    expect(counter.value).toBe(0);
+  });
+
+  test('should increment by 1', () => {
+    const counter = new Counter();
+    counter.increment();
+    expect(counter.value).toBe(1);
+  });
+});
+
+// ❌ Avoid - Tests depend on each other
+describe('Counter', () => {
+  const counter = new Counter(); // Shared state!
+
+  test('should start at 0', () => {
+    expect(counter.value).toBe(0);
+  });
+
+  test('should increment by 1', () => {
+    counter.increment(); // Depends on previous test
+    expect(counter.value).toBe(1);
+  });
+});
+```
+
+## Common Matchers
+
+### Basic Matchers
+```javascript
+expect(value).toBe(4);                    // Strict equality (===)
+expect(value).toEqual({ name: 'John' });  // Deep equality
+expect(value).not.toBe(null);             // Negation
+expect(value).toBeTruthy();               // Truthy check
+expect(value).toBeFalsy();                // Falsy check
+expect(value).toBeUndefined();            // Undefined check
+expect(value).toBeDefined();              // Defined check
+expect(value).toBeNull();                 // Null check
+```
+
+### Number Matchers
+```javascript
+expect(value).toBeGreaterThan(3);
+expect(value).toBeGreaterThanOrEqual(3.5);
+expect(value).toBeLessThan(5);
+expect(value).toBeLessThanOrEqual(4.5);
+expect(value).toBeCloseTo(0.3);           // Floating point
+```
+
+### String Matchers
+```javascript
+expect(text).toMatch(/pattern/);
+expect(text).toContain('substring');
+expect(text).toHaveLength(10);
+```
+
+### Array/Object Matchers
+```javascript
+expect(array).toContain('item');
+expect(array).toHaveLength(3);
+expect(obj).toHaveProperty('key', 'value');
+expect(obj).toMatchObject({ name: 'John' });
+```
+
+### Function Matchers
+```javascript
+expect(fn).toThrow();
+expect(fn).toThrow('error message');
+expect(fn).toThrow(Error);
+expect(mockFn).toHaveBeenCalled();
+expect(mockFn).toHaveBeenCalledTimes(1);
+expect(mockFn).toHaveBeenCalledWith(arg1, arg2);
+```
+
+## Async Testing
+
+### Using async/await
+```javascript
+test('should fetch user data', async () => {
+  const user = await fetchUser(1);
+  expect(user.name).toBe('John');
+});
+```
+
+### Using Promises
+```javascript
+test('should fetch user data', () => {
+  return fetchUser(1).then(user => {
+    expect(user.name).toBe('John');
+  });
+});
+```
+
+### Using resolves/rejects
+```javascript
+test('should fetch user data', async () => {
+  await expect(fetchUser(1)).resolves.toEqual({ name: 'John' });
+});
+
+test('should handle errors', async () => {
+  await expect(fetchUser(-1)).rejects.toThrow('User not found');
+});
+```
+
+## Performance Guidelines
+
+### 1. Keep Tests Fast
+- Mock external dependencies (API calls, database)
+- Use in-memory databases for testing
+- Avoid unnecessary setup/teardown
+
+### 2. Run Tests in Parallel
+```javascript
+// jest.config.js
+module.exports = {
+  maxWorkers: '50%', // Use 50% of available CPU cores
+};
+```
+
+### 3. Use Test Filtering
+```bash
+# Run specific test file
+npm test Button.test.ts
+
+# Run tests matching pattern
+npm test -- --testNamePattern="should render"
+
+# Run only changed tests
+npm test -- --onlyChanged
+```
+
+## Code Coverage
+
+### Configuration
+```javascript
+// jest.config.js
+module.exports = {
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'html'],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+};
+```
+
+### Run Coverage
+```bash
+npm test -- --coverage
+```
+
+## Error Handling
+
+### Test Error Cases
+```javascript
+test('should throw error for invalid input', () => {
+  expect(() => {
+    divide(10, 0);
+  }).toThrow('Cannot divide by zero');
+});
+
+test('should handle API errors', async () => {
+  const mockError = new Error('Network error');
+  mockFetch.mockRejectedValue(mockError);
+
+  await expect(fetchData()).rejects.toThrow('Network error');
+});
+```
+
+## Documentation
+
+### Add Comments for Complex Tests
+```javascript
+test('should calculate compound interest correctly', () => {
+  // Formula: A = P(1 + r/n)^(nt)
+  // P = 1000 (principal)
+  // r = 0.05 (5% annual rate)
+  // n = 12 (monthly compounding)
+  // t = 2 (years)
+  const result = calculateCompoundInterest(1000, 0.05, 12, 2);
+
+  expect(result).toBeCloseTo(1104.94, 2);
+});
+```
+
+## Anti-Patterns to Avoid
+
+### ❌ Don't Test Implementation Details
+```javascript
+// ❌ Bad - Testing internal state
+test('should set isLoading to true', () => {
+  component.fetchData();
+  expect(component.isLoading).toBe(true);
+});
+
+// ✅ Good - Testing behavior
+test('should show loading spinner while fetching', () => {
+  render(<Component />);
+  expect(screen.getByText('Loading...')).toBeInTheDocument();
+});
+```
+
+### ❌ Don't Write Overly Complex Tests
+```javascript
+// ❌ Bad - Too much logic in test
+test('complex test', () => {
+  const data = [];
+  for (let i = 0; i < 10; i++) {
+    data.push(processItem(i));
+  }
+  expect(data.filter(x => x > 5).length).toBe(4);
+});
+
+// ✅ Good - Simple and clear
+test('should process items greater than 5', () => {
+  const result = processItems([1, 6, 7, 8]);
+  expect(result).toEqual([6, 7, 8]);
+});
+```
+
+### ❌ Don't Duplicate Production Code
+```javascript
+// ❌ Bad - Reimplementing the same logic
+test('should calculate total', () => {
+  const items = [{ price: 10 }, { price: 20 }];
+  const total = items.reduce((sum, item) => sum + item.price, 0);
+  expect(calculateTotal(items)).toBe(total); // Same logic!
+});
+
+// ✅ Good - Test with known values
+test('should calculate total', () => {
+  const items = [{ price: 10 }, { price: 20 }];
+  expect(calculateTotal(items)).toBe(30);
+});
+```
+
+## CI/CD Integration
+
+### GitHub Actions Example
+```yaml
+- name: Run tests
+  run: npm test -- --ci --coverage --maxWorkers=2
+
+- name: Upload coverage
+  uses: codecov/codecov-action@v3
+  with:
+    files: ./coverage/lcov.info
+```
+
+## Quick Reference
+
+### Essential Commands
+```bash
+npm test                          # Run all tests
+npm test -- --watch              # Watch mode
+npm test -- --coverage           # With coverage
+npm test Button.test.ts          # Specific file
+npm test -- --testNamePattern="render"  # Pattern match
+npm test -- --onlyChanged        # Only changed files
+npm test -- --updateSnapshot     # Update snapshots
+```
+
+### Key Concepts
+- **Describe blocks**: Group related tests
+- **Test blocks**: Individual test cases
+- **Matchers**: Assertion methods (expect)
+- **Mocks**: Replace dependencies
+- **Spies**: Track function calls
+- **Snapshots**: Capture component output
+- **Coverage**: Measure tested code

@@ -1,0 +1,674 @@
+---
+description: Advanced Jest test patterns and testing strategies
+globs: ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts"]
+alwaysApply: false
+---
+
+# Jest Test Patterns & Strategies
+
+## Test Organization Patterns
+
+### 1. Feature-Based Testing
+```javascript
+describe('UserAuthentication', () => {
+  describe('Login', () => {
+    test('should authenticate with valid credentials', async () => {
+      const result = await login('user@example.com', 'password123');
+      expect(result.success).toBe(true);
+      expect(result.token).toBeDefined();
+    });
+
+    test('should reject invalid credentials', async () => {
+      await expect(
+        login('user@example.com', 'wrongpassword')
+      ).rejects.toThrow('Invalid credentials');
+    });
+
+    test('should handle locked accounts', async () => {
+      await expect(
+        login('locked@example.com', 'password123')
+      ).rejects.toThrow('Account locked');
+    });
+  });
+
+  describe('Logout', () => {
+    test('should clear session on logout', async () => {
+      await logout();
+      expect(getSession()).toBeNull();
+    });
+  });
+});
+```
+
+### 2. Parameterized Tests (Test.each)
+```javascript
+describe('Validation', () => {
+  test.each([
+    ['user@example.com', true],
+    ['invalid.email', false],
+    ['test@', false],
+    ['@domain.com', false],
+    ['user@example.co.uk', true],
+  ])('should validate email "%s" as %s', (email, expected) => {
+    expect(isValidEmail(email)).toBe(expected);
+  });
+});
+
+// Object-based parameterized tests
+describe('Math operations', () => {
+  test.each([
+    { a: 1, b: 1, expected: 2 },
+    { a: 2, b: 2, expected: 4 },
+    { a: 5, b: 3, expected: 8 },
+  ])('should add $a + $b to equal $expected', ({ a, b, expected }) => {
+    expect(add(a, b)).toBe(expected);
+  });
+});
+```
+
+### 3. Test Fixtures with Factory Pattern
+```javascript
+// test-utils/factories.ts
+export const createUser = (overrides = {}) => ({
+  id: 1,
+  name: 'John Doe',
+  email: 'john@example.com',
+  role: 'user',
+  ...overrides,
+});
+
+export const createProduct = (overrides = {}) => ({
+  id: 1,
+  name: 'Test Product',
+  price: 99.99,
+  stock: 10,
+  ...overrides,
+});
+
+// user.test.ts
+import { createUser } from './test-utils/factories';
+
+describe('User operations', () => {
+  test('should update user profile', () => {
+    const user = createUser({ name: 'Jane Doe' });
+    const updated = updateProfile(user, { email: 'jane@example.com' });
+
+    expect(updated.email).toBe('jane@example.com');
+  });
+
+  test('should handle admin users differently', () => {
+    const admin = createUser({ role: 'admin' });
+    expect(canDeleteUsers(admin)).toBe(true);
+  });
+});
+```
+
+## Component Testing Patterns (React/Vue)
+
+### 1. React Component Testing
+```javascript
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import Button from './Button';
+
+describe('Button Component', () => {
+  test('should render with correct text', () => {
+    render(<Button>Click me</Button>);
+    expect(screen.getByRole('button')).toHaveTextContent('Click me');
+  });
+
+  test('should handle click events', async () => {
+    const handleClick = jest.fn();
+    render(<Button onClick={handleClick}>Click me</Button>);
+
+    await userEvent.click(screen.getByRole('button'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  test('should be disabled when loading', () => {
+    render(<Button loading>Submit</Button>);
+    expect(screen.getByRole('button')).toBeDisabled();
+  });
+
+  test('should show loading spinner', () => {
+    render(<Button loading>Submit</Button>);
+    expect(screen.getByTestId('spinner')).toBeInTheDocument();
+  });
+});
+```
+
+### 2. Form Testing Pattern
+```javascript
+describe('LoginForm', () => {
+  test('should submit form with valid data', async () => {
+    const onSubmit = jest.fn();
+    render(<LoginForm onSubmit={onSubmit} />);
+
+    // Fill in form
+    await userEvent.type(screen.getByLabelText(/email/i), 'user@example.com');
+    await userEvent.type(screen.getByLabelText(/password/i), 'password123');
+
+    // Submit
+    await userEvent.click(screen.getByRole('button', { name: /submit/i }));
+
+    // Verify
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        password: 'password123',
+      });
+    });
+  });
+
+  test('should show validation errors', async () => {
+    render(<LoginForm />);
+
+    // Submit without filling form
+    await userEvent.click(screen.getByRole('button', { name: /submit/i }));
+
+    // Check for errors
+    expect(await screen.findByText(/email is required/i)).toBeInTheDocument();
+    expect(await screen.findByText(/password is required/i)).toBeInTheDocument();
+  });
+});
+```
+
+## API/Service Testing Patterns
+
+### 1. API Client Testing
+```javascript
+import axios from 'axios';
+import { UserService } from './UserService';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+describe('UserService', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('should fetch user by id', async () => {
+    const mockUser = { id: 1, name: 'John' };
+    mockedAxios.get.mockResolvedValue({ data: mockUser });
+
+    const user = await UserService.getUser(1);
+
+    expect(mockedAxios.get).toHaveBeenCalledWith('/api/users/1');
+    expect(user).toEqual(mockUser);
+  });
+
+  test('should handle network errors', async () => {
+    mockedAxios.get.mockRejectedValue(new Error('Network error'));
+
+    await expect(UserService.getUser(1)).rejects.toThrow('Network error');
+  });
+
+  test('should retry on failure', async () => {
+    mockedAxios.get
+      .mockRejectedValueOnce(new Error('Timeout'))
+      .mockResolvedValueOnce({ data: { id: 1 } });
+
+    const user = await UserService.getUser(1);
+
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    expect(user).toEqual({ id: 1 });
+  });
+});
+```
+
+### 2. Database/Repository Pattern
+```javascript
+describe('UserRepository', () => {
+  let repository;
+  let mockDb;
+
+  beforeEach(() => {
+    mockDb = {
+      query: jest.fn(),
+      transaction: jest.fn(),
+    };
+    repository = new UserRepository(mockDb);
+  });
+
+  test('should create user', async () => {
+    const userData = { name: 'John', email: 'john@example.com' };
+    mockDb.query.mockResolvedValue({ id: 1, ...userData });
+
+    const user = await repository.create(userData);
+
+    expect(mockDb.query).toHaveBeenCalledWith(
+      'INSERT INTO users (name, email) VALUES (?, ?)',
+      ['John', 'john@example.com']
+    );
+    expect(user.id).toBe(1);
+  });
+
+  test('should handle transaction rollback', async () => {
+    mockDb.transaction.mockImplementation(async (callback) => {
+      try {
+        await callback();
+      } catch (error) {
+        throw new Error('Transaction failed');
+      }
+    });
+
+    await expect(
+      repository.createWithProfile({ name: 'John' })
+    ).rejects.toThrow('Transaction failed');
+  });
+});
+```
+
+## Snapshot Testing Patterns
+
+### 1. Component Snapshots
+```javascript
+import { render } from '@testing-library/react';
+import UserCard from './UserCard';
+
+describe('UserCard', () => {
+  test('should match snapshot', () => {
+    const user = {
+      id: 1,
+      name: 'John Doe',
+      email: 'john@example.com',
+      avatar: 'avatar.jpg',
+    };
+
+    const { container } = render(<UserCard user={user} />);
+    expect(container).toMatchSnapshot();
+  });
+
+  test('should match inline snapshot', () => {
+    const props = { title: 'Hello', count: 5 };
+    const { container } = render(<Widget {...props} />);
+
+    expect(container.firstChild).toMatchInlineSnapshot(`
+      <div class="widget">
+        <h3>Hello</h3>
+        <span>5</span>
+      </div>
+    `);
+  });
+});
+```
+
+### 2. Data Structure Snapshots
+```javascript
+test('should format API response correctly', () => {
+  const rawData = {
+    user_id: 1,
+    user_name: 'John',
+    created_at: '2024-01-01',
+  };
+
+  const formatted = formatUserData(rawData);
+
+  expect(formatted).toMatchInlineSnapshot(`
+    {
+      "createdAt": "2024-01-01",
+      "id": 1,
+      "name": "John",
+    }
+  `);
+});
+```
+
+## Async/Promise Testing Patterns
+
+### 1. Async/Await Pattern
+```javascript
+describe('Async operations', () => {
+  test('should fetch and process data', async () => {
+    const data = await fetchData();
+    const processed = processData(data);
+
+    expect(processed).toHaveLength(5);
+  });
+
+  test('should handle concurrent requests', async () => {
+    const results = await Promise.all([
+      fetchUser(1),
+      fetchUser(2),
+      fetchUser(3),
+    ]);
+
+    expect(results).toHaveLength(3);
+    results.forEach(user => {
+      expect(user).toHaveProperty('id');
+      expect(user).toHaveProperty('name');
+    });
+  });
+});
+```
+
+### 2. Timeout Testing
+```javascript
+describe('Timeout handling', () => {
+  test('should timeout after 5 seconds', async () => {
+    jest.setTimeout(10000); // Set test timeout to 10s
+
+    await expect(
+      longRunningOperation()
+    ).rejects.toThrow('Operation timeout');
+  }, 10000);
+
+  test('should complete within time limit', async () => {
+    const start = Date.now();
+    await quickOperation();
+    const duration = Date.now() - start;
+
+    expect(duration).toBeLessThan(1000);
+  });
+});
+```
+
+## State Management Testing (Redux/Zustand)
+
+### 1. Redux Testing
+```javascript
+import { configureStore } from '@reduxjs/toolkit';
+import userReducer, { fetchUser, userActions } from './userSlice';
+
+describe('User Redux Slice', () => {
+  let store;
+
+  beforeEach(() => {
+    store = configureStore({
+      reducer: { user: userReducer },
+    });
+  });
+
+  test('should handle user fetch', async () => {
+    const mockUser = { id: 1, name: 'John' };
+
+    await store.dispatch(fetchUser(1));
+
+    const state = store.getState();
+    expect(state.user.data).toEqual(mockUser);
+    expect(state.user.loading).toBe(false);
+  });
+
+  test('should set loading state', () => {
+    store.dispatch(userActions.setLoading(true));
+
+    expect(store.getState().user.loading).toBe(true);
+  });
+});
+```
+
+### 2. Zustand Testing
+```javascript
+import { renderHook, act } from '@testing-library/react';
+import { useUserStore } from './userStore';
+
+describe('User Store', () => {
+  test('should update user', () => {
+    const { result } = renderHook(() => useUserStore());
+
+    act(() => {
+      result.current.setUser({ id: 1, name: 'John' });
+    });
+
+    expect(result.current.user).toEqual({ id: 1, name: 'John' });
+  });
+
+  test('should reset store', () => {
+    const { result } = renderHook(() => useUserStore());
+
+    act(() => {
+      result.current.setUser({ id: 1, name: 'John' });
+      result.current.reset();
+    });
+
+    expect(result.current.user).toBeNull();
+  });
+});
+```
+
+## Error Boundary Testing
+
+```javascript
+import { render, screen } from '@testing-library/react';
+import ErrorBoundary from './ErrorBoundary';
+
+const ThrowError = () => {
+  throw new Error('Test error');
+};
+
+describe('ErrorBoundary', () => {
+  // Suppress console.error for this test
+  beforeEach(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    console.error.mockRestore();
+  });
+
+  test('should catch and display errors', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowError />
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+  });
+
+  test('should render children when no error', () => {
+    render(
+      <ErrorBoundary>
+        <div>Normal content</div>
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByText('Normal content')).toBeInTheDocument();
+  });
+});
+```
+
+## Custom Hook Testing
+
+```javascript
+import { renderHook, act } from '@testing-library/react';
+import { useCounter } from './useCounter';
+
+describe('useCounter', () => {
+  test('should initialize with default value', () => {
+    const { result } = renderHook(() => useCounter());
+    expect(result.current.count).toBe(0);
+  });
+
+  test('should initialize with custom value', () => {
+    const { result } = renderHook(() => useCounter(10));
+    expect(result.current.count).toBe(10);
+  });
+
+  test('should increment counter', () => {
+    const { result } = renderHook(() => useCounter());
+
+    act(() => {
+      result.current.increment();
+    });
+
+    expect(result.current.count).toBe(1);
+  });
+
+  test('should decrement counter', () => {
+    const { result } = renderHook(() => useCounter(5));
+
+    act(() => {
+      result.current.decrement();
+    });
+
+    expect(result.current.count).toBe(4);
+  });
+
+  test('should reset counter', () => {
+    const { result } = renderHook(() => useCounter(5));
+
+    act(() => {
+      result.current.increment();
+      result.current.reset();
+    });
+
+    expect(result.current.count).toBe(5);
+  });
+});
+```
+
+## Timer Testing
+
+```javascript
+describe('Timer functions', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('should execute callback after delay', () => {
+    const callback = jest.fn();
+    delayedExecute(callback, 1000);
+
+    expect(callback).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(1000);
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  test('should execute callback multiple times', () => {
+    const callback = jest.fn();
+    setInterval(callback, 1000);
+
+    jest.advanceTimersByTime(3000);
+    expect(callback).toHaveBeenCalledTimes(3);
+  });
+
+  test('should clear timeout', () => {
+    const callback = jest.fn();
+    const timerId = setTimeout(callback, 1000);
+
+    clearTimeout(timerId);
+    jest.advanceTimersByTime(1000);
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+});
+```
+
+## Accessibility Testing
+
+```javascript
+import { render } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
+
+expect.extend(toHaveNoViolations);
+
+describe('Button accessibility', () => {
+  test('should have no accessibility violations', async () => {
+    const { container } = render(<Button>Click me</Button>);
+    const results = await axe(container);
+
+    expect(results).toHaveNoViolations();
+  });
+
+  test('should have proper ARIA labels', () => {
+    render(<Button aria-label="Close dialog">X</Button>);
+    expect(screen.getByLabelText('Close dialog')).toBeInTheDocument();
+  });
+});
+```
+
+## Performance Testing
+
+```javascript
+describe('Performance tests', () => {
+  test('should render large list efficiently', () => {
+    const items = Array.from({ length: 10000 }, (_, i) => ({ id: i }));
+
+    const start = performance.now();
+    render(<LargeList items={items} />);
+    const duration = performance.now() - start;
+
+    expect(duration).toBeLessThan(100); // Should render in less than 100ms
+  });
+
+  test('should memoize expensive calculations', () => {
+    const calculate = jest.fn(() => expensiveOperation());
+    const { rerender } = render(<Component calculate={calculate} value={1} />);
+
+    expect(calculate).toHaveBeenCalledTimes(1);
+
+    // Rerender with same props
+    rerender(<Component calculate={calculate} value={1} />);
+    expect(calculate).toHaveBeenCalledTimes(1); // Should not recalculate
+  });
+});
+```
+
+## Test Cleanup Best Practices
+
+```javascript
+describe('Cleanup patterns', () => {
+  let cleanup;
+
+  afterEach(() => {
+    // Reset all mocks
+    jest.clearAllMocks();
+
+    // Cleanup any side effects
+    cleanup?.();
+
+    // Reset modules if needed
+    // jest.resetModules();
+  });
+
+  test('should cleanup resources', () => {
+    const resource = createResource();
+    cleanup = () => resource.destroy();
+
+    // Test logic...
+  });
+});
+```
+
+## Debugging Tests
+
+```javascript
+describe('Debugging helpers', () => {
+  test('should debug component output', () => {
+    const { debug } = render(<Component />);
+
+    // Print component tree
+    debug();
+
+    // Print specific element
+    debug(screen.getByRole('button'));
+  });
+
+  test('should show available queries', () => {
+    render(<Component />);
+
+    // Shows all available queries for debugging
+    screen.logTestingPlaygroundURL();
+  });
+});
+```
+
+## Best Practices Summary
+
+1. **One Assertion Per Test** (when possible)
+2. **Test Behavior, Not Implementation**
+3. **Use Descriptive Test Names**
+4. **Keep Tests Independent**
+5. **Mock External Dependencies**
+6. **Use Factories for Test Data**
+7. **Test Edge Cases and Errors**
+8. **Maintain Test Readability**
+9. **Run Tests Frequently**
+10. **Keep Tests Fast**

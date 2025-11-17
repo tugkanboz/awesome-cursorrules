@@ -1,0 +1,779 @@
+---
+description: Jest configuration and setup best practices
+globs: ["**/jest.config.js", "**/jest.config.ts", "**/jest.setup.js", "**/jest.setup.ts"]
+alwaysApply: false
+---
+
+# Jest Configuration & Setup
+
+## Basic Configuration
+
+### jest.config.js (JavaScript Projects)
+```javascript
+module.exports = {
+  // Test environment
+  testEnvironment: 'node', // or 'jsdom' for browser-like environment
+
+  // Root directory for tests
+  roots: ['<rootDir>/src'],
+
+  // File extensions to test
+  testMatch: [
+    '**/__tests__/**/*.[jt]s?(x)',
+    '**/?(*.)+(spec|test).[jt]s?(x)',
+  ],
+
+  // Transform files with babel-jest
+  transform: {
+    '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest',
+  },
+
+  // Module file extensions
+  moduleFileExtensions: ['js', 'jsx', 'json', 'node'],
+
+  // Coverage configuration
+  collectCoverageFrom: [
+    'src/**/*.{js,jsx}',
+    '!src/**/*.test.{js,jsx}',
+    '!src/index.js',
+  ],
+
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'html'],
+
+  // Setup files
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+
+  // Clear mocks automatically
+  clearMocks: true,
+};
+```
+
+### jest.config.ts (TypeScript Projects)
+```typescript
+import type { Config } from 'jest';
+
+const config: Config = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+
+  roots: ['<rootDir>/src'],
+
+  testMatch: [
+    '**/__tests__/**/*.+(ts|tsx|js)',
+    '**/?(*.)+(spec|test).+(ts|tsx|js)',
+  ],
+
+  transform: {
+    '^.+\\.(ts|tsx)$': 'ts-jest',
+  },
+
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.test.{ts,tsx}',
+    '!src/**/*.spec.{ts,tsx}',
+    '!src/types/**',
+  ],
+
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'html', 'json'],
+
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+
+  clearMocks: true,
+  resetMocks: true,
+  restoreMocks: true,
+};
+
+export default config;
+```
+
+## React/Frontend Configuration
+
+### React with Testing Library
+```javascript
+module.exports = {
+  testEnvironment: 'jsdom',
+
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+
+  transform: {
+    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+  },
+
+  moduleNameMapper: {
+    // Handle CSS imports
+    '^.+\\.module\\.(css|sass|scss)$': 'identity-obj-proxy',
+    '^.+\\.(css|sass|scss)$': '<rootDir>/__mocks__/styleMock.js',
+
+    // Handle image imports
+    '^.+\\.(jpg|jpeg|png|gif|webp|svg)$': '<rootDir>/__mocks__/fileMock.js',
+
+    // Handle module aliases
+    '^@/components/(.*)$': '<rootDir>/src/components/$1',
+    '^@/pages/(.*)$': '<rootDir>/src/pages/$1',
+    '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
+  },
+
+  collectCoverageFrom: [
+    'src/**/*.{js,jsx,ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/*.stories.{js,jsx,ts,tsx}',
+    '!src/**/__tests__/**',
+  ],
+
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+};
+```
+
+### Mock Files for Assets
+```javascript
+// __mocks__/fileMock.js
+module.exports = 'test-file-stub';
+
+// __mocks__/styleMock.js
+module.exports = {};
+```
+
+### jest.setup.js for React Testing Library
+```javascript
+import '@testing-library/jest-dom';
+
+// Add custom matchers
+expect.extend({
+  toBeWithinRange(received, floor, ceiling) {
+    const pass = received >= floor && received <= ceiling;
+    if (pass) {
+      return {
+        message: () =>
+          `expected ${received} not to be within range ${floor} - ${ceiling}`,
+        pass: true,
+      };
+    } else {
+      return {
+        message: () =>
+          `expected ${received} to be within range ${floor} - ${ceiling}`,
+        pass: false,
+      };
+    }
+  },
+});
+
+// Global test setup
+beforeAll(() => {
+  // Setup before all tests
+});
+
+afterAll(() => {
+  // Cleanup after all tests
+});
+```
+
+## TypeScript Configuration
+
+### Complete TypeScript Setup
+```typescript
+// jest.config.ts
+import type { Config } from 'jest';
+
+const config: Config = {
+  preset: 'ts-jest',
+  testEnvironment: 'jsdom',
+
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        jsx: 'react',
+        esModuleInterop: true,
+      },
+    },
+  },
+
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+  },
+
+  moduleNameMapper: {
+    '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
+
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+};
+
+export default config;
+```
+
+### tsconfig for Jest
+```json
+{
+  "compilerOptions": {
+    "jsx": "react",
+    "esModuleInterop": true,
+    "types": ["jest", "@testing-library/jest-dom"]
+  }
+}
+```
+
+## Advanced Configuration Options
+
+### Custom Test Environment
+```javascript
+// jest.config.js
+module.exports = {
+  testEnvironment: '<rootDir>/custom-test-environment.js',
+};
+
+// custom-test-environment.js
+const NodeEnvironment = require('jest-environment-node').default;
+
+class CustomEnvironment extends NodeEnvironment {
+  async setup() {
+    await super.setup();
+    this.global.customValue = 'test-value';
+  }
+
+  async teardown() {
+    await super.teardown();
+  }
+}
+
+module.exports = CustomEnvironment;
+```
+
+### Global Setup and Teardown
+```javascript
+// jest.config.js
+module.exports = {
+  globalSetup: '<rootDir>/global-setup.js',
+  globalTeardown: '<rootDir>/global-teardown.js',
+};
+
+// global-setup.js
+module.exports = async () => {
+  // Start test database
+  global.__DB__ = await startDatabase();
+};
+
+// global-teardown.js
+module.exports = async () => {
+  // Stop test database
+  await global.__DB__.stop();
+};
+```
+
+### Multiple Projects Configuration
+```javascript
+module.exports = {
+  projects: [
+    {
+      displayName: 'unit',
+      testMatch: ['<rootDir>/src/**/*.test.js'],
+      testEnvironment: 'node',
+    },
+    {
+      displayName: 'integration',
+      testMatch: ['<rootDir>/tests/integration/**/*.test.js'],
+      testEnvironment: 'node',
+    },
+    {
+      displayName: 'e2e',
+      testMatch: ['<rootDir>/tests/e2e/**/*.test.js'],
+      testEnvironment: 'jsdom',
+    },
+  ],
+};
+```
+
+## Code Coverage Configuration
+
+### Detailed Coverage Settings
+```javascript
+module.exports = {
+  collectCoverage: true,
+  collectCoverageFrom: [
+    'src/**/*.{js,jsx,ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/*.test.{js,jsx,ts,tsx}',
+    '!src/**/*.spec.{js,jsx,ts,tsx}',
+    '!src/**/__tests__/**',
+    '!src/**/__mocks__/**',
+    '!src/**/index.{js,ts}',
+  ],
+
+  coverageDirectory: 'coverage',
+
+  coverageReporters: [
+    'text',        // Console output
+    'text-summary', // Summary in console
+    'lcov',        // For coverage tools
+    'html',        // HTML report
+    'json',        // JSON format
+    'clover',      // Clover format
+  ],
+
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+    './src/components/': {
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90,
+    },
+    './src/utils/': {
+      branches: 95,
+      functions: 95,
+      lines: 95,
+      statements: 95,
+    },
+  },
+
+  coveragePathIgnorePatterns: [
+    '/node_modules/',
+    '/dist/',
+    '/coverage/',
+  ],
+};
+```
+
+## Module Resolution
+
+### Path Mapping
+```javascript
+module.exports = {
+  moduleNameMapper: {
+    '^@/components/(.*)$': '<rootDir>/src/components/$1',
+    '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
+    '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',
+    '^@/services/(.*)$': '<rootDir>/src/services/$1',
+    '^@/types/(.*)$': '<rootDir>/src/types/$1',
+    '^@/test-utils$': '<rootDir>/src/test-utils',
+  },
+
+  modulePaths: ['<rootDir>/src'],
+
+  moduleDirectories: ['node_modules', 'src'],
+};
+```
+
+### Transforming Files
+```javascript
+module.exports = {
+  transform: {
+    '^.+\\.(js|jsx)$': 'babel-jest',
+    '^.+\\.(ts|tsx)$': 'ts-jest',
+    '^.+\\.svg$': '<rootDir>/svgTransform.js',
+  },
+
+  transformIgnorePatterns: [
+    'node_modules/(?!(module-to-transform|another-module)/)',
+  ],
+};
+
+// svgTransform.js
+module.exports = {
+  process() {
+    return { code: 'module.exports = {};' };
+  },
+};
+```
+
+## Performance Optimization
+
+### Parallel Execution
+```javascript
+module.exports = {
+  maxWorkers: '50%', // Use 50% of available CPU cores
+
+  // Or specific number
+  maxWorkers: 4,
+
+  // Run tests in bands
+  maxConcurrency: 5,
+};
+```
+
+### Caching
+```javascript
+module.exports = {
+  cache: true,
+  cacheDirectory: '<rootDir>/.jest-cache',
+};
+```
+
+### Bail on Errors
+```javascript
+module.exports = {
+  bail: 1, // Stop after first failure
+  bail: 5, // Stop after 5 failures
+};
+```
+
+## Watch Mode Configuration
+
+```javascript
+module.exports = {
+  watchPathIgnorePatterns: [
+    'node_modules',
+    'dist',
+    'coverage',
+  ],
+
+  watchPlugins: [
+    'jest-watch-typeahead/filename',
+    'jest-watch-typeahead/testname',
+  ],
+};
+```
+
+## Reporter Configuration
+
+### Custom Reporters
+```javascript
+module.exports = {
+  reporters: [
+    'default',
+    [
+      'jest-junit',
+      {
+        outputDirectory: 'test-results',
+        outputName: 'junit.xml',
+      },
+    ],
+    [
+      'jest-html-reporter',
+      {
+        pageTitle: 'Test Report',
+        outputPath: 'test-results/report.html',
+      },
+    ],
+  ],
+
+  verbose: true, // Display individual test results
+};
+```
+
+## Setup Files Examples
+
+### jest.setup.js - Comprehensive Example
+```javascript
+// Add custom matchers
+import '@testing-library/jest-dom';
+
+// Mock window.matchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: jest.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  })),
+});
+
+// Mock IntersectionObserver
+global.IntersectionObserver = class IntersectionObserver {
+  constructor() {}
+  disconnect() {}
+  observe() {}
+  takeRecords() {
+    return [];
+  }
+  unobserve() {}
+};
+
+// Mock console methods
+global.console = {
+  ...console,
+  error: jest.fn(),
+  warn: jest.fn(),
+};
+
+// Global test utilities
+global.testUtils = {
+  sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+  createMockUser: (overrides = {}) => ({
+    id: 1,
+    name: 'Test User',
+    email: 'test@example.com',
+    ...overrides,
+  }),
+};
+
+// Reset mocks after each test
+afterEach(() => {
+  jest.clearAllMocks();
+});
+```
+
+## Environment-Specific Configuration
+
+### Development vs CI Configuration
+```javascript
+const isCI = process.env.CI === 'true';
+
+module.exports = {
+  maxWorkers: isCI ? 2 : '50%',
+
+  collectCoverage: isCI,
+
+  coverageReporters: isCI
+    ? ['text', 'lcov']
+    : ['text', 'html'],
+
+  reporters: isCI
+    ? ['default', 'jest-junit']
+    : ['default'],
+
+  bail: isCI ? 1 : 0,
+};
+```
+
+## Package.json Scripts
+
+### Common Test Scripts
+```json
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
+    "test:update": "jest --updateSnapshot",
+    "test:unit": "jest --testPathPattern=src",
+    "test:integration": "jest --testPathPattern=tests/integration",
+    "test:changed": "jest --onlyChanged",
+    "test:verbose": "jest --verbose"
+  }
+}
+```
+
+## Monorepo Configuration (Lerna/Nx)
+
+### Root jest.config.js
+```javascript
+module.exports = {
+  projects: [
+    '<rootDir>/packages/*/jest.config.js',
+  ],
+
+  coverageDirectory: '<rootDir>/coverage',
+
+  collectCoverageFrom: [
+    'packages/*/src/**/*.{js,jsx,ts,tsx}',
+  ],
+};
+```
+
+### Package-Specific Configuration
+```javascript
+// packages/my-package/jest.config.js
+const baseConfig = require('../../jest.config.base.js');
+
+module.exports = {
+  ...baseConfig,
+  displayName: 'my-package',
+  rootDir: '.',
+  testMatch: ['<rootDir>/src/**/*.test.{js,ts}'],
+};
+```
+
+## Debugging Configuration
+
+### VS Code launch.json
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Jest Debug",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": [
+        "--runInBand",
+        "--no-cache",
+        "--watchAll=false"
+      ],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    }
+  ]
+}
+```
+
+## Common Configuration Patterns
+
+### Next.js Configuration
+```javascript
+const nextJest = require('next/jest');
+
+const createJestConfig = nextJest({
+  dir: './',
+});
+
+const customJestConfig = {
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  moduleDirectories: ['node_modules', '<rootDir>/'],
+  testEnvironment: 'jest-environment-jsdom',
+};
+
+module.exports = createJestConfig(customJestConfig);
+```
+
+### NestJS Configuration
+```javascript
+module.exports = {
+  moduleFileExtensions: ['js', 'json', 'ts'],
+  rootDir: 'src',
+  testRegex: '.*\\.spec\\.ts$',
+  transform: {
+    '^.+\\.(t|j)s$': 'ts-jest',
+  },
+  collectCoverageFrom: [
+    '**/*.(t|j)s',
+  ],
+  coverageDirectory: '../coverage',
+  testEnvironment: 'node',
+};
+```
+
+### React Native Configuration
+```javascript
+module.exports = {
+  preset: 'react-native',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(react-native|@react-native|@react-navigation)/)',
+  ],
+  moduleNameMapper: {
+    '\\.(jpg|jpeg|png|gif|svg)$': '<rootDir>/__mocks__/fileMock.js',
+  },
+};
+```
+
+## Best Practices
+
+### 1. Use Presets
+```javascript
+// Use existing presets when possible
+module.exports = {
+  preset: 'ts-jest',
+  // or
+  preset: 'react-native',
+};
+```
+
+### 2. Clear Configuration
+```javascript
+// ✅ Good - Clear and organized
+module.exports = {
+  // Test environment
+  testEnvironment: 'jsdom',
+
+  // File matching
+  testMatch: ['**/*.test.js'],
+
+  // Transforms
+  transform: {
+    '^.+\\.js$': 'babel-jest',
+  },
+};
+```
+
+### 3. Document Custom Configuration
+```javascript
+module.exports = {
+  // Use jsdom for React component testing
+  testEnvironment: 'jsdom',
+
+  // Ignore node_modules except specific packages that need transpilation
+  transformIgnorePatterns: [
+    'node_modules/(?!(package-to-transform)/)',
+  ],
+};
+```
+
+### 4. Use Environment Variables
+```javascript
+const isCI = process.env.CI === 'true';
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+module.exports = {
+  maxWorkers: isCI ? 2 : '50%',
+  collectCoverage: isCI || isDevelopment,
+};
+```
+
+### 5. Keep It Minimal
+```javascript
+// ✅ Good - Only necessary config
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+};
+
+// ❌ Avoid - Over-configured
+module.exports = {
+  // ... 100 lines of config
+};
+```
+
+## Configuration Validation
+
+```javascript
+// Validate configuration
+const { validate } = require('jest-validate');
+
+const config = {
+  testEnvironment: 'jsdom',
+  // ... other config
+};
+
+const { hasDeprecationWarnings } = validate(config, {
+  exampleConfig: require('jest-config').defaults,
+});
+
+module.exports = config;
+```
+
+## Quick Reference
+
+### Essential Config Options
+- `testEnvironment`: 'node' | 'jsdom'
+- `testMatch`: Array of glob patterns
+- `transform`: File transformation rules
+- `moduleNameMapper`: Path aliases
+- `setupFilesAfterEnv`: Setup files
+- `collectCoverageFrom`: Coverage patterns
+- `coverageThreshold`: Minimum coverage
+- `maxWorkers`: Parallel execution
+- `clearMocks`: Auto-clear mocks
+
+### Common Commands
+```bash
+jest --init                    # Initialize configuration
+jest --showConfig             # Display configuration
+jest --debug                  # Debug information
+jest --listTests              # List all test files
+jest --clearCache             # Clear cache
+```

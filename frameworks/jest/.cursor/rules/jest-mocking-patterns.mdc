@@ -1,0 +1,798 @@
+---
+description: Jest mocking, stubbing, and spying patterns
+globs: ["**/*.test.js", "**/*.test.ts", "**/*.spec.js", "**/*.spec.ts", "**/__mocks__/**/*"]
+alwaysApply: false
+---
+
+# Jest Mocking & Stubbing Patterns
+
+## Mock Functions (jest.fn())
+
+### Basic Mock Functions
+```javascript
+describe('Mock functions', () => {
+  test('should track function calls', () => {
+    const mockFn = jest.fn();
+
+    mockFn('arg1', 'arg2');
+    mockFn('arg3');
+
+    expect(mockFn).toHaveBeenCalledTimes(2);
+    expect(mockFn).toHaveBeenCalledWith('arg1', 'arg2');
+    expect(mockFn).toHaveBeenLastCalledWith('arg3');
+  });
+
+  test('should return mock values', () => {
+    const mockFn = jest.fn()
+      .mockReturnValue(42)
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(2);
+
+    expect(mockFn()).toBe(1);
+    expect(mockFn()).toBe(2);
+    expect(mockFn()).toBe(42);
+    expect(mockFn()).toBe(42);
+  });
+
+  test('should return resolved promises', async () => {
+    const mockFn = jest.fn().mockResolvedValue('success');
+
+    const result = await mockFn();
+    expect(result).toBe('success');
+  });
+
+  test('should return rejected promises', async () => {
+    const mockFn = jest.fn().mockRejectedValue(new Error('failed'));
+
+    await expect(mockFn()).rejects.toThrow('failed');
+  });
+});
+```
+
+### Mock Implementation
+```javascript
+describe('Mock implementation', () => {
+  test('should use custom implementation', () => {
+    const mockFn = jest.fn((x, y) => x + y);
+
+    expect(mockFn(2, 3)).toBe(5);
+    expect(mockFn).toHaveBeenCalledWith(2, 3);
+  });
+
+  test('should use different implementations', () => {
+    const mockFn = jest.fn()
+      .mockImplementationOnce(() => 'first')
+      .mockImplementationOnce(() => 'second')
+      .mockImplementation(() => 'default');
+
+    expect(mockFn()).toBe('first');
+    expect(mockFn()).toBe('second');
+    expect(mockFn()).toBe('default');
+    expect(mockFn()).toBe('default');
+  });
+
+  test('should mock async implementation', async () => {
+    const mockFn = jest.fn(async (id) => {
+      return { id, name: `User ${id}` };
+    });
+
+    const user = await mockFn(1);
+    expect(user).toEqual({ id: 1, name: 'User 1' });
+  });
+});
+```
+
+## Spying on Methods (jest.spyOn())
+
+### Spying on Object Methods
+```javascript
+describe('Spying on methods', () => {
+  test('should spy on object method', () => {
+    const math = {
+      add: (a, b) => a + b,
+      multiply: (a, b) => a * b,
+    };
+
+    const addSpy = jest.spyOn(math, 'add');
+
+    math.add(2, 3);
+
+    expect(addSpy).toHaveBeenCalledWith(2, 3);
+    expect(addSpy).toHaveReturnedWith(5);
+
+    addSpy.mockRestore(); // Restore original implementation
+  });
+
+  test('should mock spy implementation', () => {
+    const math = {
+      add: (a, b) => a + b,
+    };
+
+    const addSpy = jest.spyOn(math, 'add').mockReturnValue(100);
+
+    expect(math.add(2, 3)).toBe(100);
+
+    addSpy.mockRestore();
+    expect(math.add(2, 3)).toBe(5);
+  });
+});
+```
+
+### Spying on Class Methods
+```javascript
+class Calculator {
+  add(a, b) {
+    return a + b;
+  }
+
+  multiply(a, b) {
+    return a * b;
+  }
+}
+
+describe('Calculator', () => {
+  test('should spy on class method', () => {
+    const calc = new Calculator();
+    const addSpy = jest.spyOn(calc, 'add');
+
+    calc.add(5, 3);
+
+    expect(addSpy).toHaveBeenCalledWith(5, 3);
+    expect(addSpy).toHaveReturnedWith(8);
+  });
+
+  test('should spy on prototype method', () => {
+    const addSpy = jest.spyOn(Calculator.prototype, 'add');
+    const calc = new Calculator();
+
+    calc.add(5, 3);
+
+    expect(addSpy).toHaveBeenCalledWith(5, 3);
+
+    addSpy.mockRestore();
+  });
+});
+```
+
+## Module Mocking
+
+### Automatic Mocking
+```javascript
+// __mocks__/axios.js
+export default {
+  get: jest.fn(() => Promise.resolve({ data: {} })),
+  post: jest.fn(() => Promise.resolve({ data: {} })),
+};
+
+// userService.test.js
+import axios from 'axios';
+import { getUser } from './userService';
+
+jest.mock('axios');
+
+describe('UserService', () => {
+  test('should fetch user', async () => {
+    const mockUser = { id: 1, name: 'John' };
+    axios.get.mockResolvedValue({ data: mockUser });
+
+    const user = await getUser(1);
+
+    expect(axios.get).toHaveBeenCalledWith('/api/users/1');
+    expect(user).toEqual(mockUser);
+  });
+});
+```
+
+### Manual Mocking with Factory
+```javascript
+// api.test.js
+jest.mock('./api', () => ({
+  fetchUser: jest.fn(),
+  createUser: jest.fn(),
+  updateUser: jest.fn(),
+}));
+
+import { fetchUser, createUser } from './api';
+
+describe('API mocking', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('should use mocked functions', async () => {
+    fetchUser.mockResolvedValue({ id: 1, name: 'John' });
+
+    const user = await fetchUser(1);
+
+    expect(user.name).toBe('John');
+    expect(fetchUser).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+### Partial Module Mocking
+```javascript
+jest.mock('./utils', () => ({
+  ...jest.requireActual('./utils'), // Keep actual implementations
+  formatDate: jest.fn(),             // Mock only this function
+}));
+
+import { formatDate, formatCurrency } from './utils';
+
+describe('Partial mocking', () => {
+  test('should use real formatCurrency', () => {
+    expect(formatCurrency(1000)).toBe('$1,000.00'); // Real implementation
+  });
+
+  test('should use mocked formatDate', () => {
+    formatDate.mockReturnValue('2024-01-01');
+    expect(formatDate(new Date())).toBe('2024-01-01'); // Mocked
+  });
+});
+```
+
+## Mocking ES6 Classes
+
+### Mock Class Constructor
+```javascript
+// UserService.js
+export class UserService {
+  constructor(apiClient) {
+    this.apiClient = apiClient;
+  }
+
+  async getUser(id) {
+    return this.apiClient.get(`/users/${id}`);
+  }
+}
+
+// UserService.test.js
+jest.mock('./UserService');
+import { UserService } from './UserService';
+
+describe('UserService', () => {
+  test('should mock class methods', async () => {
+    const mockGetUser = jest.fn().mockResolvedValue({ id: 1 });
+
+    UserService.mockImplementation(() => ({
+      getUser: mockGetUser,
+    }));
+
+    const service = new UserService();
+    const user = await service.getUser(1);
+
+    expect(mockGetUser).toHaveBeenCalledWith(1);
+    expect(user).toEqual({ id: 1 });
+  });
+});
+```
+
+### Mock Class with jest.fn()
+```javascript
+const MockUserService = jest.fn().mockImplementation(() => ({
+  getUser: jest.fn().mockResolvedValue({ id: 1, name: 'John' }),
+  createUser: jest.fn().mockResolvedValue({ id: 2, name: 'Jane' }),
+}));
+
+describe('Mocked service', () => {
+  test('should use mocked service', async () => {
+    const service = new MockUserService();
+    const user = await service.getUser(1);
+
+    expect(user.name).toBe('John');
+    expect(service.getUser).toHaveBeenCalledWith(1);
+  });
+});
+```
+
+## Mocking External Dependencies
+
+### Mocking axios
+```javascript
+import axios from 'axios';
+import { fetchUsers } from './api';
+
+jest.mock('axios');
+
+describe('API calls', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('should fetch users successfully', async () => {
+    const mockUsers = [
+      { id: 1, name: 'John' },
+      { id: 2, name: 'Jane' },
+    ];
+
+    axios.get.mockResolvedValue({ data: mockUsers });
+
+    const users = await fetchUsers();
+
+    expect(axios.get).toHaveBeenCalledWith('/api/users');
+    expect(users).toEqual(mockUsers);
+  });
+
+  test('should handle errors', async () => {
+    axios.get.mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchUsers()).rejects.toThrow('Network error');
+  });
+});
+```
+
+### Mocking fetch
+```javascript
+global.fetch = jest.fn();
+
+describe('Fetch API', () => {
+  beforeEach(() => {
+    fetch.mockClear();
+  });
+
+  test('should fetch data', async () => {
+    const mockData = { id: 1, name: 'John' };
+
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    const response = await fetch('/api/users/1');
+    const data = await response.json();
+
+    expect(fetch).toHaveBeenCalledWith('/api/users/1');
+    expect(data).toEqual(mockData);
+  });
+
+  test('should handle fetch errors', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 404,
+    });
+
+    const response = await fetch('/api/users/999');
+    expect(response.ok).toBe(false);
+    expect(response.status).toBe(404);
+  });
+});
+```
+
+### Mocking localStorage
+```javascript
+const localStorageMock = (() => {
+  let store = {};
+
+  return {
+    getItem: jest.fn((key) => store[key] || null),
+    setItem: jest.fn((key, value) => {
+      store[key] = value.toString();
+    }),
+    removeItem: jest.fn((key) => {
+      delete store[key];
+    }),
+    clear: jest.fn(() => {
+      store = {};
+    }),
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+});
+
+describe('LocalStorage', () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+    jest.clearAllMocks();
+  });
+
+  test('should save to localStorage', () => {
+    localStorage.setItem('user', 'John');
+
+    expect(localStorage.setItem).toHaveBeenCalledWith('user', 'John');
+    expect(localStorage.getItem('user')).toBe('John');
+  });
+
+  test('should remove from localStorage', () => {
+    localStorage.setItem('user', 'John');
+    localStorage.removeItem('user');
+
+    expect(localStorage.getItem('user')).toBeNull();
+  });
+});
+```
+
+## Mocking Date and Time
+
+### Mock Date.now()
+```javascript
+describe('Date mocking', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2024-01-01'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('should use mocked date', () => {
+    const now = new Date();
+    expect(now.getFullYear()).toBe(2024);
+    expect(now.getMonth()).toBe(0);
+    expect(now.getDate()).toBe(1);
+  });
+
+  test('should advance time', () => {
+    const start = Date.now();
+
+    jest.advanceTimersByTime(1000);
+
+    const end = Date.now();
+    expect(end - start).toBe(1000);
+  });
+});
+```
+
+### Mock with Specific Implementation
+```javascript
+describe('Date with spy', () => {
+  const realDate = Date;
+
+  beforeAll(() => {
+    const mockDate = new Date('2024-01-01');
+    jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
+  });
+
+  afterAll(() => {
+    global.Date = realDate;
+  });
+
+  test('should return mocked date', () => {
+    const date = new Date();
+    expect(date.toISOString()).toContain('2024-01-01');
+  });
+});
+```
+
+## Mocking Environment Variables
+
+```javascript
+describe('Environment variables', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.resetModules();
+    process.env = {
+      ...originalEnv,
+      API_URL: 'https://test-api.com',
+      NODE_ENV: 'test',
+    };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test('should use mocked env variables', () => {
+    expect(process.env.API_URL).toBe('https://test-api.com');
+    expect(process.env.NODE_ENV).toBe('test');
+  });
+});
+```
+
+## Mocking File System (Node.js)
+
+```javascript
+import fs from 'fs';
+
+jest.mock('fs');
+
+describe('File operations', () => {
+  test('should read file', () => {
+    const mockData = 'file content';
+    fs.readFileSync.mockReturnValue(mockData);
+
+    const content = fs.readFileSync('test.txt', 'utf8');
+
+    expect(content).toBe('file content');
+    expect(fs.readFileSync).toHaveBeenCalledWith('test.txt', 'utf8');
+  });
+
+  test('should write file', () => {
+    fs.writeFileSync.mockImplementation(() => {});
+
+    fs.writeFileSync('test.txt', 'new content');
+
+    expect(fs.writeFileSync).toHaveBeenCalledWith('test.txt', 'new content');
+  });
+});
+```
+
+## Mock Call Inspection
+
+### Analyzing Mock Calls
+```javascript
+describe('Mock call inspection', () => {
+  test('should inspect all calls', () => {
+    const mockFn = jest.fn();
+
+    mockFn('first', 1);
+    mockFn('second', 2);
+    mockFn('third', 3);
+
+    // Access all calls
+    expect(mockFn.mock.calls).toEqual([
+      ['first', 1],
+      ['second', 2],
+      ['third', 3],
+    ]);
+
+    // Access specific call
+    expect(mockFn.mock.calls[0][0]).toBe('first');
+    expect(mockFn.mock.calls[1][1]).toBe(2);
+
+    // Last call
+    expect(mockFn.mock.lastCall).toEqual(['third', 3]);
+  });
+
+  test('should inspect return values', () => {
+    const mockFn = jest.fn()
+      .mockReturnValueOnce('a')
+      .mockReturnValueOnce('b');
+
+    mockFn();
+    mockFn();
+
+    expect(mockFn.mock.results).toEqual([
+      { type: 'return', value: 'a' },
+      { type: 'return', value: 'b' },
+    ]);
+  });
+
+  test('should track instances', () => {
+    const MockClass = jest.fn();
+    const instance1 = new MockClass();
+    const instance2 = new MockClass();
+
+    expect(MockClass.mock.instances).toHaveLength(2);
+    expect(MockClass.mock.instances[0]).toBe(instance1);
+    expect(MockClass.mock.instances[1]).toBe(instance2);
+  });
+});
+```
+
+## Advanced Mocking Patterns
+
+### Conditional Mocking
+```javascript
+const mockFetch = jest.fn((url) => {
+  if (url.includes('/users/1')) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ id: 1, name: 'John' }),
+    });
+  }
+
+  if (url.includes('/users/2')) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ id: 2, name: 'Jane' }),
+    });
+  }
+
+  return Promise.resolve({
+    ok: false,
+    status: 404,
+  });
+});
+
+global.fetch = mockFetch;
+
+test('should handle different endpoints', async () => {
+  const user1 = await fetch('/users/1').then(r => r.json());
+  const user2 = await fetch('/users/2').then(r => r.json());
+
+  expect(user1.name).toBe('John');
+  expect(user2.name).toBe('Jane');
+});
+```
+
+### Chained Mocking
+```javascript
+describe('Chained API calls', () => {
+  test('should mock chained methods', () => {
+    const mockDb = {
+      select: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue([{ id: 1 }]),
+    };
+
+    const query = mockDb
+      .select('*')
+      .from('users')
+      .where('id', 1)
+      .execute();
+
+    expect(mockDb.select).toHaveBeenCalledWith('*');
+    expect(mockDb.from).toHaveBeenCalledWith('users');
+    expect(mockDb.where).toHaveBeenCalledWith('id', 1);
+  });
+});
+```
+
+### Mock Factory Pattern
+```javascript
+// test-utils/mockFactories.js
+export const createMockUser = (overrides = {}) => ({
+  id: 1,
+  name: 'John Doe',
+  email: 'john@example.com',
+  role: 'user',
+  ...overrides,
+});
+
+export const createMockApiResponse = (data, overrides = {}) => ({
+  ok: true,
+  status: 200,
+  data,
+  ...overrides,
+});
+
+// user.test.js
+import { createMockUser, createMockApiResponse } from './test-utils/mockFactories';
+
+describe('User operations', () => {
+  test('should process user', () => {
+    const user = createMockUser({ name: 'Jane' });
+    const response = createMockApiResponse(user);
+
+    expect(response.data.name).toBe('Jane');
+  });
+});
+```
+
+## Clearing and Resetting Mocks
+
+### Clear vs Reset vs Restore
+```javascript
+describe('Mock cleanup', () => {
+  const mockFn = jest.fn();
+
+  beforeEach(() => {
+    mockFn.mockReturnValue(42);
+    mockFn('test');
+  });
+
+  test('clearAllMocks - clears call history', () => {
+    jest.clearAllMocks();
+
+    expect(mockFn).not.toHaveBeenCalled();
+    expect(mockFn()).toBe(42); // Implementation still exists
+  });
+
+  test('resetAllMocks - clears history and implementation', () => {
+    jest.resetAllMocks();
+
+    expect(mockFn).not.toHaveBeenCalled();
+    expect(mockFn()).toBeUndefined(); // Implementation cleared
+  });
+
+  test('restoreAllMocks - restores original implementation', () => {
+    const obj = { method: () => 'original' };
+    const spy = jest.spyOn(obj, 'method').mockReturnValue('mocked');
+
+    expect(obj.method()).toBe('mocked');
+
+    jest.restoreAllMocks();
+
+    expect(obj.method()).toBe('original');
+  });
+});
+```
+
+### Manual Cleanup
+```javascript
+describe('Manual cleanup', () => {
+  let mockFn;
+
+  beforeEach(() => {
+    mockFn = jest.fn();
+  });
+
+  afterEach(() => {
+    mockFn.mockClear();  // Clear call history
+    // or
+    mockFn.mockReset();  // Clear history and implementation
+    // or
+    mockFn.mockRestore(); // Restore original (for spies)
+  });
+
+  test('should work independently', () => {
+    mockFn('test');
+    expect(mockFn).toHaveBeenCalledWith('test');
+  });
+});
+```
+
+## Best Practices
+
+### 1. Clear Mocks Between Tests
+```javascript
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+```
+
+### 2. Use Specific Assertions
+```javascript
+// ✅ Good - Specific assertions
+expect(mockFn).toHaveBeenCalledWith(expectedArg);
+expect(mockFn).toHaveBeenCalledTimes(1);
+
+// ❌ Avoid - Too general
+expect(mockFn).toHaveBeenCalled();
+```
+
+### 3. Mock at the Right Level
+```javascript
+// ✅ Good - Mock at module boundary
+jest.mock('./api');
+
+// ❌ Avoid - Mocking internal implementation
+jest.mock('./utils/helper'); // If it's internal to api
+```
+
+### 4. Keep Mocks Simple
+```javascript
+// ✅ Good - Simple, focused mock
+const mockGetUser = jest.fn().mockResolvedValue({ id: 1 });
+
+// ❌ Avoid - Overly complex mock
+const mockGetUser = jest.fn((id) => {
+  if (id === 1) return Promise.resolve({ id: 1 });
+  if (id === 2) return Promise.resolve({ id: 2 });
+  // ... many more conditions
+});
+```
+
+### 5. Document Complex Mocks
+```javascript
+// Mock the payment gateway with realistic behavior
+// - First call fails (simulating network retry)
+// - Second call succeeds
+const mockPaymentGateway = jest.fn()
+  .mockRejectedValueOnce(new Error('Timeout'))
+  .mockResolvedValueOnce({ success: true, transactionId: '123' });
+```
+
+## Common Pitfalls
+
+### ❌ Forgetting to Clear Mocks
+```javascript
+// This can cause tests to affect each other
+test('first test', () => {
+  mockFn('a');
+});
+
+test('second test', () => {
+  expect(mockFn).toHaveBeenCalledTimes(1); // Might be 2!
+});
+```
+
+### ❌ Mocking Too Much
+```javascript
+// Don't mock everything - test real behavior when possible
+jest.mock('./math'); // Unnecessary if math is pure functions
+```
+
+### ❌ Not Using Type Definitions
+```typescript
+// ✅ Good - Proper typing
+const mockFn = jest.fn<(id: number) => Promise<User>>();
+
+// ❌ Avoid - No types
+const mockFn = jest.fn();
+```
