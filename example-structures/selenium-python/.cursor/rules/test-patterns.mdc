@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description: Selenium pytest test patterns — data-driven tests, fixtures, error handling, and performance checks
+globs: **/test_*.py,**/*_test.py,**/tests/**/*.py
 alwaysApply: false
 ---
 # Selenium Python Test Patterns

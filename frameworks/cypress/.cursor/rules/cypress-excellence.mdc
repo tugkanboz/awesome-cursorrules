@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Advanced Cypress testing patterns and best practices — custom commands, page objects, and network testing
+globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js,**/cypress/**/*.ts
 alwaysApply: false
 ---
 # Cypress Testing Excellence

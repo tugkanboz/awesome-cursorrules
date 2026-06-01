@@ -22,22 +22,23 @@ Cursor has revolutionized AI-assisted development by moving beyond the limitatio
 This repository serves as a **living showcase** of modern Cursor Rules implementations across various development scenarios:
 
 ```
-awesome-cursor-rules/
-├── 🏗️ frameworks/              # Framework-specific configurations
-│   ├── selenium-python/        # Python test automation patterns
-│   ├── cypress/                # JavaScript E2E testing rules
-│   ├── playwright/             # Cross-browser testing setup
-│   ├── react/                  # React development standards
-│   └── nodejs-api/             # Backend API development rules
-├── 📋 templates/                # Quick-start project templates
-│   ├── web-automation/         # Complete automation project setup
-│   ├── api-testing/            # API testing framework template
-│   └── mobile-testing/         # Mobile app testing configuration
-├── 🎯 examples/                 # Real-world implementations
-│   ├── monorepo-setup/         # Enterprise-scale organization
-│   ├── team-standards/         # Company-wide coding standards
-│   └── cicd-integration/       # CI/CD pipeline integration
-└── 📚 legacy-migration/         # Migration guides from .cursorrules
+awesome-cursorrules/
+├── 📚 rules/                       # Legacy .cursorrules files (migration source)
+│   ├── appium-mobile-test-automation-framework/
+│   ├── cypress-javascript-test-automation-framework/
+│   ├── k6-performance-test-framework/
+│   ├── playwright-javascript-test-automation-framework/
+│   ├── restassured-java-framework/
+│   ├── selenium-net-test-automation-framework/
+│   └── selenium-python-test-automation-framework/
+├── 🏗️ frameworks/                  # Framework .cursor/rules examples (with nested rules)
+│   ├── cypress/                    # .cursor/rules/{core,patterns}/*.mdc
+│   └── selenium-python/            # .cursor/rules/patterns/*.mdc
+├── 🎯 example-structures/          # Flat, focused .mdc structure examples
+│   ├── cypress/                    # testing-fundamentals, api-testing
+│   ├── react-typescript/           # component-development
+│   └── selenium-python/            # architecture, page-objects, test-patterns
+└── 📖 legacy-migration/            # Before/after migration guides
 ```
 
 ## 🔄 The Great Migration: Before & After
@@ -104,7 +105,7 @@ Automatically activated based on file patterns:
 ```markdown
 ---
 description: React component development patterns
-globs: ["**/*.tsx", "**/components/**/*.js", "**/hooks/**/*.ts"]
+globs: **/*.tsx,**/components/**/*.js,**/hooks/**/*.ts
 alwaysApply: false
 ---
 
@@ -123,7 +124,7 @@ AI intelligently applies based on context:
 ```markdown
 ---
 description: Advanced performance optimization techniques
-globs: ["**/*.js", "**/*.ts", "**/*.tsx"]
+globs: **/*.js,**/*.ts,**/*.tsx
 alwaysApply: false
 ---
 
@@ -151,6 +152,34 @@ Creates a complete test automation project structure:
 @github-actions-ci
 ```
 
+## 📄 AGENTS.md: The Simpler Alternative
+
+Alongside `.mdc` rules, Cursor now supports **`AGENTS.md`** — a plain Markdown file (no frontmatter, no metadata) that Cursor reads as project guidance. It's the lowest-friction way to give the agent context, and it's portable across other AI coding tools that adopt the same convention.
+
+```bash
+project/
+├── AGENTS.md                # Project-wide guidance (always read)
+├── frontend/
+│   └── AGENTS.md            # Frontend-specific guidance
+└── backend/
+    └── AGENTS.md            # Backend-specific guidance
+```
+
+**How it works:**
+- ✅ Plain Markdown — just write instructions, no YAML frontmatter
+- ✅ **Nested directories**: an `AGENTS.md` deeper in the tree takes precedence over a parent one for files in that subtree
+- ✅ Great for tech-stack notes, conventions, and "how to run things" that should always be in context
+
+**`AGENTS.md` vs `.mdc` rules — when to use which:**
+
+| Use `AGENTS.md` | Use `.cursor/rules/*.mdc` |
+|-----------------|---------------------------|
+| Always-on project context | Context-aware, file-scoped activation |
+| Simple, portable, no metadata | `globs`, `description`, `alwaysApply` control |
+| One file per directory | Multiple focused rules per project |
+
+> 💡 Note: `.cursor/rules/` only loads files with the `.mdc` extension — a plain `.md` placed there is ignored, *except* when it's named `AGENTS.md`.
+
 ## 🚀 Featured Framework Transformations
 
 ### Python Test Automation Evolution
@@ -169,7 +198,7 @@ Creates a complete test automation project structure:
 ```markdown
 ---
 description: Advanced Selenium Python automation patterns
-globs: ["**/*.py", "**/test_*.py", "**/pages/**/*.py", "**/conftest.py"]
+globs: **/*.py,**/test_*.py,**/pages/**/*.py,**/conftest.py
 alwaysApply: false
 ---
 
@@ -200,7 +229,7 @@ alwaysApply: false
 ```markdown
 ---
 description: Advanced Cypress testing patterns and best practices
-globs: ["**/*.cy.js", "**/*.cy.ts", "**/cypress/**/*.js"]
+globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 alwaysApply: false
 ---
 
@@ -375,7 +404,7 @@ mkdir -p .cursor/rules
 
 ## 📚 Essential Resources
 
-- **📖 Official Documentation**: [Cursor Rules Comprehensive Guide](https://docs.cursor.com/context/rules)
+- **📖 Official Documentation**: [Cursor Rules Comprehensive Guide](https://cursor.com/docs/context/rules)
 - **🎥 Video Tutorials**: [Migration Walkthrough Series](https://youtube.com/cursor-rules)
 - **💬 Community Hub**: [Cursor Community Forum](https://forum.cursor.com)
 - **🔧 Migration Tools**: [Automated Migration Scripts](https://github.com/cursor-tools/migration)
@@ -426,7 +455,7 @@ Infrastructure that grows from individual projects to enterprise-scale monorepos
 - **[⚛️ React TypeScript](./example-structures/react-typescript/.cursor/rules/)** - Modern component development
 
 ### 🎓 **Learning Resources**
-- **[📖 Official Documentation](https://docs.cursor.com/context/rules)** - Cursor Rules comprehensive guide
+- **[📖 Official Documentation](https://cursor.com/docs/context/rules)** - Cursor Rules comprehensive guide
 - **[🎥 Video Tutorials](https://youtube.com/cursor-rules)** - Step-by-step migration walkthrough
 - **[💬 Community Forum](https://forum.cursor.com)** - Connect with other developers
 

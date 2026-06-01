@@ -71,19 +71,19 @@ react-typescript/
 
 ```yaml
 # Framework Architecture - Only for config files
-globs: ["**/conftest.py", "**/pytest.ini", "**/requirements.txt"]
+globs: **/conftest.py,**/pytest.ini,**/requirements.txt
 
 # Page Objects - Only for page object files  
-globs: ["**/pages/**/*.py", "**/page_objects/**/*.py"]
+globs: **/pages/**/*.py,**/page_objects/**/*.py
 
 # Test Patterns - Only for test files
-globs: ["**/test_*.py", "**/*_test.py", "**/tests/**/*.py"]
+globs: **/test_*.py,**/*_test.py,**/tests/**/*.py
 
 # React Components - Only for React files
-globs: ["**/*.tsx", "**/*.ts", "**/components/**/*.js"]
+globs: **/*.tsx,**/*.ts,**/components/**/*.js
 
 # Cypress Tests - Only for Cypress files
-globs: ["**/*.cy.js", "**/*.cy.ts", "**/cypress/**/*.js"]
+globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ```
 
 ## 🚀 Advanced Patterns Showcase

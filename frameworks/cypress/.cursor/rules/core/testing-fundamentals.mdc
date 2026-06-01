@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description: Core Cypress testing fundamentals — reliable selectors, waiting strategy, and spec organization
+globs:
 alwaysApply: false
 ---
 # Cypress Testing Fundamentals

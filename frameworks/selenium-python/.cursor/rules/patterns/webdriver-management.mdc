@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Selenium WebDriver lifecycle management — driver factory, explicit waits, browser options, and teardown
+globs: **/*.py
 alwaysApply: false
 ---
 # WebDriver Management Excellence

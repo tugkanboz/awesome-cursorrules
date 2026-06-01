@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description: Core Cypress testing principles — selector strategy, smart waiting, and spec organization. Apply when writing or reviewing Cypress E2E tests.
+globs:
 alwaysApply: false
 ---
 # Cypress Testing Fundamentals
