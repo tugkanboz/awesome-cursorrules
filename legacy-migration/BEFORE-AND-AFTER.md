@@ -104,7 +104,7 @@ alwaysApply: true
 ```markdown
 ---
 description: Python testing best practices and pytest patterns
-globs: ["**/test_*.py", "**/*_test.py", "**/tests/**/*.py"]
+globs: **/test_*.py,**/*_test.py,**/tests/**/*.py
 alwaysApply: false
 ---
 
@@ -147,7 +147,7 @@ def test_dashboard_access_by_role(user_role, expected_access, login_as):
 ```markdown
 ---
 description: Advanced Selenium WebDriver patterns and page object implementation
-globs: ["**/pages/**/*.py", "**/page_objects/**/*.py", "**/conftest.py"]
+globs: **/pages/**/*.py,**/page_objects/**/*.py,**/conftest.py
 alwaysApply: false
 ---
 
@@ -193,7 +193,7 @@ class BasePage:
 ```markdown
 ---
 description: Advanced testing techniques and optimization strategies
-globs: ["**/*.py"]
+globs: **/*.py
 alwaysApply: false
 ---
 

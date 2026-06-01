@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Modern React + TypeScript component patterns — hooks, typed props, performance optimization, forms, and testing
+globs: **/*.tsx,**/*.ts,**/components/**/*.jsx
 alwaysApply: false
 ---
 # React TypeScript Component Excellence

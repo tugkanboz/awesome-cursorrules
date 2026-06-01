@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Selenium + pytest framework architecture — configuration, fixtures, and dependency management
+globs: **/conftest.py,**/pytest.ini,**/requirements.txt,**/pyproject.toml
 alwaysApply: false
 ---
 # Selenium Python Framework Architecture

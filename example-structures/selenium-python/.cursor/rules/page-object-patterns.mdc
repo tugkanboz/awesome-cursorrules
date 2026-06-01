@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Page Object Model patterns for Selenium — BasePage, component objects, and fluent interfaces
+globs: **/pages/**/*.py,**/page_objects/**/*.py
 alwaysApply: false
 ---
 # Page Object Model Excellence

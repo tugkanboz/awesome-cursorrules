@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: Cypress network and API testing — cy.intercept, mocking external services, and request/response validation
+globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js,**/cypress/**/*.ts
 alwaysApply: false
 ---
 # Cypress Network & API Testing Excellence
