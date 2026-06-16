@@ -1,0 +1,373 @@
+---
+description: Next.js 14+ App Router patterns — Server Components, Client Components, Route Handlers, Server Actions, and metadata API
+globs: **/app/**/*.tsx,**/app/**/*.ts,**/app/**/*.jsx,**/app/**/*.js,next.config.*
+alwaysApply: false
+---
+# Next.js App Router Excellence
+
+## Server Components vs Client Components
+
+- **Default is Server Component** — every file in `app/` is a Server Component unless marked otherwise
+- Add `"use client"` only at the boundary where you need browser APIs, event handlers, or React state
+- Keep `"use client"` components as leaf nodes; wrap them in Server Components for data fetching
+- Never fetch data inside a Client Component when a Server Component parent can pass it as a prop
+
+```tsx
+// ✅ Server Component — async, direct DB/API access, no "use client"
+// app/products/page.tsx
+import { db } from '@/lib/db'
+
+export default async function ProductsPage() {
+  const products = await db.product.findMany({ orderBy: { createdAt: 'desc' } })
+
+  return (
+    <main>
+      <h1>Products</h1>
+      {products.map((product) => (
+        <ProductCard key={product.id} product={product} />
+      ))}
+    </main>
+  )
+}
+
+// ✅ Client Component — only for interactivity
+// components/add-to-cart-button.tsx
+'use client'
+
+import { useState } from 'react'
+
+interface AddToCartButtonProps {
+  productId: string
+}
+
+export function AddToCartButton({ productId }: AddToCartButtonProps) {
+  const [loading, setLoading] = useState(false)
+
+  const handleAdd = async () => {
+    setLoading(true)
+    await addToCart(productId)
+    setLoading(false)
+  }
+
+  return (
+    <button onClick={handleAdd} disabled={loading}>
+      {loading ? 'Adding…' : 'Add to Cart'}
+    </button>
+  )
+}
+```
+
+## App Router File Conventions
+
+```
+app/
+├── layout.tsx          # Root layout — wraps all routes, runs once
+├── page.tsx            # Route UI rendered at /
+├── loading.tsx         # Automatic Suspense boundary for this segment
+├── error.tsx           # Error boundary ("use client" required)
+├── not-found.tsx       # Rendered by notFound() or unmatched routes
+├── global-error.tsx    # Error boundary for root layout
+├── route.ts            # API Route Handler (no page.tsx in same segment)
+├── template.tsx        # Like layout but re-mounts on navigation
+└── products/
+    ├── page.tsx         # Renders at /products
+    ├── [id]/
+    │   └── page.tsx     # Renders at /products/:id
+    └── (marketing)/     # Route group — ignored in URL path
+        └── page.tsx
+```
+
+```tsx
+// ✅ Root layout — must return <html> and <body>
+// app/layout.tsx
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+
+const inter = Inter({ subsets: ['latin'] })
+
+export const metadata: Metadata = {
+  title: { template: '%s | My App', default: 'My App' },
+  description: 'My application description',
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>{children}</body>
+    </html>
+  )
+}
+
+// ✅ Error boundary — must be a Client Component
+// app/products/error.tsx
+'use client'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  return (
+    <div>
+      <h2>Something went wrong</h2>
+      <button onClick={reset}>Try again</button>
+    </div>
+  )
+}
+```
+
+## Route Handlers
+
+Use `route.ts` for API endpoints. Export named functions for each HTTP method.
+
+```typescript
+// ✅ app/api/products/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { db } from '@/lib/db'
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const page = Number(searchParams.get('page') ?? '1')
+
+  const products = await db.product.findMany({
+    skip: (page - 1) * 20,
+    take: 20,
+  })
+
+  return NextResponse.json({ products })
+}
+
+const createProductSchema = z.object({
+  name: z.string().min(1),
+  price: z.number().positive(),
+})
+
+export async function POST(request: NextRequest) {
+  const body = await request.json()
+  const parsed = createProductSchema.safeParse(body)
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const product = await db.product.create({ data: parsed.data })
+  return NextResponse.json(product, { status: 201 })
+}
+
+// ✅ Dynamic route handler: app/api/products/[id]/route.ts
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const product = await db.product.findUnique({ where: { id } })
+
+  if (!product) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(product)
+}
+```
+
+## Server Actions
+
+Use Server Actions for mutations triggered from forms or Client Components.
+
+```typescript
+// ✅ lib/actions/product.ts
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+import { z } from 'zod'
+import { db } from '@/lib/db'
+
+const schema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  price: z.coerce.number().positive('Price must be positive'),
+})
+
+export async function createProduct(prevState: unknown, formData: FormData) {
+  const parsed = schema.safeParse({
+    name: formData.get('name'),
+    price: formData.get('price'),
+  })
+
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors }
+  }
+
+  await db.product.create({ data: parsed.data })
+
+  revalidatePath('/products')
+  redirect('/products')
+}
+```
+
+```tsx
+// ✅ Using Server Action with useActionState
+// app/products/new/page.tsx
+'use client'
+
+import { useActionState } from 'react'
+import { createProduct } from '@/lib/actions/product'
+
+export default function NewProductPage() {
+  const [state, action, pending] = useActionState(createProduct, null)
+
+  return (
+    <form action={action}>
+      <div>
+        <label htmlFor="name">Name</label>
+        <input id="name" name="name" type="text" required />
+        {state?.errors?.name && <p>{state.errors.name[0]}</p>}
+      </div>
+      <div>
+        <label htmlFor="price">Price</label>
+        <input id="price" name="price" type="number" step="0.01" required />
+        {state?.errors?.price && <p>{state.errors.price[0]}</p>}
+      </div>
+      <button type="submit" disabled={pending}>
+        {pending ? 'Creating…' : 'Create Product'}
+      </button>
+    </form>
+  )
+}
+```
+
+## Metadata API
+
+```tsx
+// ✅ Static metadata
+// app/about/page.tsx
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'About Us',
+  description: 'Learn more about our company',
+  openGraph: {
+    title: 'About Us',
+    description: 'Learn more about our company',
+    images: ['/og-about.png'],
+  },
+}
+
+// ✅ Dynamic metadata from route params
+// app/products/[id]/page.tsx
+import type { Metadata } from 'next'
+import { db } from '@/lib/db'
+
+interface Props {
+  params: Promise<{ id: string }>
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params
+  const product = await db.product.findUnique({ where: { id } })
+
+  if (!product) return { title: 'Product Not Found' }
+
+  return {
+    title: product.name,
+    description: product.description,
+    openGraph: { images: [product.imageUrl] },
+  }
+}
+
+export default async function ProductPage({ params }: Props) {
+  const { id } = await params
+  const product = await db.product.findUnique({ where: { id } })
+  // ...
+}
+```
+
+## Data Fetching Patterns
+
+```tsx
+// ✅ Parallel data fetching in Server Components
+export default async function DashboardPage() {
+  const [user, stats, notifications] = await Promise.all([
+    fetchUser(),
+    fetchStats(),
+    fetchNotifications(),
+  ])
+
+  return <Dashboard user={user} stats={stats} notifications={notifications} />
+}
+
+// ✅ Streaming with Suspense
+import { Suspense } from 'react'
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Dashboard</h1>
+      <Suspense fallback={<StatsSkeleton />}>
+        <StatsPanel />       {/* async Server Component */}
+      </Suspense>
+      <Suspense fallback={<FeedSkeleton />}>
+        <ActivityFeed />     {/* async Server Component */}
+      </Suspense>
+    </main>
+  )
+}
+
+// ✅ fetch() with Next.js cache options
+async function getProduct(id: string) {
+  const res = await fetch(`https://api.example.com/products/${id}`, {
+    next: { revalidate: 3600 },  // ISR: revalidate every hour
+  })
+
+  if (!res.ok) throw new Error('Failed to fetch product')
+  return res.json()
+}
+
+// Force dynamic (no cache)
+async function getLivePrice(symbol: string) {
+  const res = await fetch(`https://api.example.com/price/${symbol}`, {
+    cache: 'no-store',
+  })
+  return res.json()
+}
+```
+
+## Image and Font Optimization
+
+```tsx
+// ✅ next/image — always specify width/height or fill
+import Image from 'next/image'
+
+// Fixed dimensions
+<Image src="/hero.png" alt="Hero banner" width={1200} height={600} priority />
+
+// Fill parent container
+<div className="relative h-64 w-full">
+  <Image src={product.imageUrl} alt={product.name} fill className="object-cover" />
+</div>
+
+// ✅ next/font — load at module level, not inside components
+import { Inter, Roboto_Mono } from 'next/font/google'
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const robotoMono = Roboto_Mono({ subsets: ['latin'], variable: '--font-mono' })
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className={`${inter.variable} ${robotoMono.variable}`}>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+## Key Rules
+
+- Params are now `Promise<{ ... }>` in Next.js 15 — always `await params`
+- Never use `pages/` and `app/` for the same routes — pick one per segment
+- `revalidatePath()` and `revalidateTag()` only work in Server Actions and Route Handlers
+- Use `next/navigation` (`useRouter`, `redirect`, `notFound`) in App Router, not `next/router`
+- Co-locate non-route files (components, utils) inside `app/` using `_` prefix or route groups `(group)` to prevent them from becoming routes
