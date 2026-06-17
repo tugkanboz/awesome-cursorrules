@@ -37,6 +37,7 @@ awesome-cursorrules/
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
 ├── 🎯 example-structures/          # Flat, focused .mdc structure examples
 │   ├── cypress/                    # testing-fundamentals, api-testing
+│   ├── next-js/                    # app-router-patterns
 │   ├── react-typescript/           # component-development
 │   └── selenium-python/            # architecture, page-objects, test-patterns
 └── 📖 legacy-migration/            # Before/after migration guides
@@ -454,6 +455,7 @@ Infrastructure that grows from individual projects to enterprise-scale monorepos
 - **[🐍 Selenium Python](./example-structures/selenium-python/.cursor/rules/)** - Advanced test automation patterns
 - **[🌐 Cypress Testing](./example-structures/cypress/.cursor/rules/)** - E2E testing excellence
 - **[⚛️ React TypeScript](./example-structures/react-typescript/.cursor/rules/)** - Modern component development
+- **[▲ Next.js App Router](./example-structures/next-js/.cursor/rules/)** - Server Components, Route Handlers, Server Actions, and metadata API
 
 ### 🎓 **Learning Resources**
 - **[📖 Official Documentation](https://cursor.com/docs/context/rules)** - Cursor Rules comprehensive guide
