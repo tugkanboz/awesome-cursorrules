@@ -1,0 +1,89 @@
+# Project: Vitest Unit Testing Framework
+
+## Framework Structure
+- Use Vitest as the primary test runner for Vite-based projects
+- Organize tests alongside source files or in dedicated __tests__ directories
+- Use TypeScript for type-safe test implementations
+- Leverage Vite's native ESM support for fast test execution
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices
+- Use meaningful test and variable naming
+- Implement clean code principles
+- Limit describe block nesting to 3 levels maximum
+
+## Test Organization
+- Group related tests using describe blocks
+- Use it/test functions for individual test cases
+- Implement beforeEach/afterEach for setup and teardown
+- Separate unit, integration, and component tests into distinct directories
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern
+- Write focused, single-responsibility tests
+- Avoid test interdependencies and shared mutable state
+- Use vi.fn() for mocking instead of manual mocks
+- Leverage in-source testing for utility functions when appropriate
+
+## Mocking Strategies
+- Use vi.mock() for module-level mocking
+- Implement vi.spyOn() for method-level spying
+- Use vi.useFakeTimers() for time-dependent tests
+- Mock HTTP requests with msw (Mock Service Worker) or vi.mock()
+- Restore mocks after each test with vi.restoreAllMocks()
+
+## Assertions
+- Use expect() with specific, descriptive matchers
+- Implement custom matchers for domain-specific assertions
+- Use toMatchSnapshot() for stable UI component output testing
+- Prefer toEqual for deep equality over toBe for object comparisons
+
+## Coverage
+- Configure coverage with v8 or istanbul provider
+- Set meaningful coverage thresholds (statements, branches, functions, lines)
+- Use exclude patterns for generated or non-testable code
+- Generate HTML reports for local visualization
+
+## Performance
+- Use it.concurrent for independent parallel tests
+- Implement proper test isolation to enable safe parallel execution
+- Minimize unnecessary setup/teardown operations
+- Configure poolOptions for optimal worker usage
+
+## Component Testing
+- Use @vitest/browser for browser-based component tests
+- Integrate with Testing Library (@testing-library/vue, /react, /svelte) for user-centric assertions
+- Mock child components only when testing in isolation is critical
+- Snapshot test stable, presentational components
+
+## Test Data Management
+- Use factory functions or fixtures for reusable test data
+- Define TypeScript types for all test data structures
+- Avoid hardcoded magic values; use named constants
+- Generate dynamic or random data with @faker-js/faker when needed
+
+## CI/CD Integration
+- Configure reporters for CI environments (--reporter=verbose or junit)
+- Use --reporter=junit for CI pipeline compatibility
+- Enable test result caching with vitest cache
+- Upload coverage reports to services like Codecov or SonarQube
+
+## Environment Configuration
+- Use environment-specific vitest.config files
+- Configure test globals (describe, it, expect) via globals: true
+- Handle environment variables with dotenv integration
+- Use setupFiles for global test setup and teardown logic
+
+## Error Handling
+- Test both success and failure code paths
+- Assert on specific error messages and types
+- Use expect().rejects for async error assertions
+- Implement retry logic tests for flaky network operations
+
+## Documentation
+- Document complex test scenarios with brief inline comments
+- Maintain a test helper and fixture README
+- Include examples for custom matchers
+- Document project-specific mock strategies
+
+Remember to leverage Vitest's native Vite integration and HMR-based watch mode for fast, reliable unit testing.

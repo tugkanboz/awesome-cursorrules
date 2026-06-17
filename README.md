@@ -30,7 +30,8 @@ awesome-cursorrules/
 │   ├── playwright-javascript-test-automation-framework/
 │   ├── restassured-java-framework/
 │   ├── selenium-net-test-automation-framework/
-│   └── selenium-python-test-automation-framework/
+│   ├── selenium-python-test-automation-framework/
+│   └── vitest-javascript-unit-test-framework/
 ├── 🏗️ frameworks/                  # Framework .cursor/rules examples (with nested rules)
 │   ├── cypress/                    # .cursor/rules/{core,patterns}/*.mdc
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
