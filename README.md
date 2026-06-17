@@ -182,6 +182,8 @@ project/
 
 > 💡 Note: `.cursor/rules/` only loads files with the `.mdc` extension — a plain `.md` placed there is ignored, *except* when it's named `AGENTS.md`.
 
+Starter sample: [Agent Rules Starter Free](https://github.com/758302-tech/agent-rules-starter-free) includes a minimal `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/agent-baseline.mdc` setup that can be copied into a new project.
+
 ## 🚀 Featured Framework Transformations
 
 ### Python Test Automation Evolution
