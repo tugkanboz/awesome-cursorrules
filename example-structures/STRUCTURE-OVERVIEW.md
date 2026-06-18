@@ -54,6 +54,21 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### ⚡ FastAPI
+```
+fastapi/
+├── .cursor/rules/
+│   └── api-patterns.mdc              # Routers, schemas, DI, async handlers
+└── app/
+```
+
+**Key Features:**
+- **Project Structure**: Routers, services, schemas, and dependencies separation
+- **Pydantic v2 Schemas**: `from_attributes`, `model_dump(exclude_unset=True)`, typed fields
+- **Dependency Injection**: Reusable `Depends()` callables for auth, DB sessions
+- **Async Patterns**: Async SQLAlchemy, `AsyncSession`, lifespan context manager
+- **Testing**: pytest + httpx `AsyncClient` with `ASGITransport` and dependency overrides
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions
@@ -127,7 +142,7 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ## 🎉 Getting Started
 
 ### Quick Setup
-1. **Choose Framework**: Select from Selenium Python, Cypress, or React TypeScript
+1. **Choose Framework**: Select from Selenium Python, Cypress, React TypeScript, or FastAPI
 2. **Copy Rules**: Copy `.mdc` files to your project's `.cursor/rules/` directory
 3. **Customize**: Adjust glob patterns and examples to match your project structure
 4. **Iterate**: Refine rules based on team feedback and project needs
