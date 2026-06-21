@@ -1,0 +1,115 @@
+# Project: Jest JavaScript/TypeScript Unit Testing Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript and TypeScript projects
+- Configure Jest via jest.config.js (or jest.config.ts) at the project root
+- Use ts-jest or Babel for TypeScript transformation
+- Organize tests alongside source files (*.test.ts) or in dedicated __tests__ directories
+- Keep test helper utilities and shared fixtures in a __tests__/helpers or __tests__/fixtures directory
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices and project ESLint rules
+- Use TypeScript for type-safe test implementations when the source is TypeScript
+- Use meaningful test and variable naming that reads like a sentence
+- Limit describe block nesting to 3 levels maximum
+- Keep each test file focused on a single module or unit of behavior
+
+## Test Organization
+- Group related tests using describe blocks named after the unit under test
+- Use it() or test() for individual test cases; prefer it() for readability ("it should...")
+- Use beforeEach/afterEach for per-test setup and teardown
+- Use beforeAll/afterAll only for expensive shared setup that is truly read-only
+- Separate unit, integration, and component tests into distinct directories or Jest projects
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern with blank lines separating each section
+- Write focused, single-responsibility tests — one logical assertion per test
+- Avoid test interdependencies; each test must be runnable in isolation
+- Never share mutable state across tests via module-level variables
+- Use jest.isolateModules() when you need clean module registry per test
+- Prefer explicit expectations over snapshot-only tests for critical logic
+
+## Mocking Strategies
+- Use jest.fn() for simple function mocks; provide implementation via mockImplementation()
+- Use jest.mock('<module>') for module-level mocking at the top of the test file
+- Use jest.spyOn(object, 'method') to spy on or override real implementations
+- Restore mocks after each test with jest.restoreAllMocks() in afterEach or via restoreMocks: true in config
+- Use jest.useFakeTimers() for time-dependent tests (setTimeout, setInterval, Date)
+- Mock HTTP requests with msw (Mock Service Worker) for realistic fetch/axios interception
+- Use jest.resetModules() in beforeEach when module state must be fresh per test
+
+## Assertions
+- Use expect() with specific, descriptive matchers rather than generic truthy/falsy checks
+- Prefer toEqual() for deep equality over toBe() for objects and arrays
+- Use toThrow() / toThrowError() for error path assertions; always wrap in an arrow function
+- Use toHaveBeenCalledWith() over toHaveBeenCalled() to assert exact arguments
+- Implement custom matchers via expect.extend() for domain-specific assertions
+- Use expect.assertions(n) in async tests to guard against missed await keywords
+
+## Async Testing
+- Always use async/await for asynchronous tests; never return bare Promises
+- Use waitFor() from Testing Library for UI state changes instead of arbitrary timeouts
+- Combine jest.useFakeTimers() with jest.runAllTimers() or jest.advanceTimersByTime() for timer tests
+- Handle unhandled promise rejections by asserting with rejects: await expect(promise).rejects.toThrow()
+
+## Coverage
+- Configure coverage with the v8 provider (preferred) or babel/istanbul
+- Set meaningful coverage thresholds in jest.config.js under coverageThreshold
+- Use collectCoverageFrom to target only production source files, excluding generated code
+- Generate lcov and text-summary reporters for CI and local visualization
+- Upload coverage reports to services like Codecov or SonarQube in CI pipelines
+
+## Performance
+- Run test suites in parallel by default (Jest's default behavior); avoid --runInBand except for debugging
+- Use --shard for splitting large test suites across CI workers
+- Minimize heavy setup in beforeAll; prefer lightweight beforeEach setup
+- Use jest.mock() to avoid real I/O (network, filesystem, database) in unit tests
+- Enable cacheDirectory in jest.config.js to speed up repeated runs locally
+
+## Component Testing
+- Use @testing-library/react (or /vue, /svelte, /angular) for user-centric DOM assertions
+- Query elements by accessible roles, labels, and text — avoid querying by class or id
+- Use userEvent from @testing-library/user-event over fireEvent for realistic browser interactions
+- Wrap components in required providers (Router, Store, Theme) using a custom render helper
+- Use screen.debug() and prettyDOM() during development, not in committed tests
+
+## Snapshot Testing
+- Use toMatchSnapshot() only for stable, presentational components where the full output is meaningful
+- Prefer toMatchInlineSnapshot() for small, critical output to keep context visible in the test file
+- Always review and commit snapshot changes deliberately; treat a diff as a real assertion failure
+- Run jest --updateSnapshot only after manually verifying the new output is correct
+
+## Test Data Management
+- Use factory functions or a builder pattern for reusable test data objects
+- Define TypeScript interfaces or types for all test data structures
+- Avoid hardcoded magic values; use named constants or factory defaults
+- Generate dynamic or random test data with @faker-js/faker when needed
+- Store shared fixtures in __tests__/fixtures and import explicitly — do not rely on global setup for data
+
+## CI/CD Integration
+- Use --ci flag in CI environments to fail on missing snapshots instead of creating them
+- Configure --reporters=default,jest-junit for CI pipeline compatibility
+- Enable --forceExit to prevent Jest from hanging if async resources are not cleaned up
+- Cache the Jest cache directory and node_modules between CI runs for speed
+- Run jest --coverage only on CI or as a pre-commit gate, not on every watch-mode run
+
+## Environment Configuration
+- Set testEnvironment to node (default) for server-side code or jsdom for browser/DOM code
+- Configure moduleNameMapper for path aliases and static asset stubs (images, CSS modules)
+- Use setupFilesAfterFramework (setupFilesAfterFramework: ['<rootDir>/jest.setup.ts']) for global test setup
+- Handle environment variables with dotenv-jest or by setting process.env in jest.config.js
+- Use projects array in jest.config.js to run multiple configurations (e.g., unit + integration) in one command
+
+## Error Handling
+- Test both success and failure code paths for every public function
+- Assert on specific error messages and types, not just that an error was thrown
+- Use expect().rejects.toThrow() for async error assertions
+- Verify that cleanup logic runs even when errors occur (e.g., resources are released in finally blocks)
+
+## Documentation
+- Name test files to mirror the source file: src/utils/format.ts → src/utils/format.test.ts
+- Write test descriptions that serve as living documentation of expected behavior
+- Document non-obvious mock setups with a brief inline comment explaining why the mock is needed
+- Maintain a README in the __tests__ directory describing test categories, how to run them, and coverage goals
+
+Remember to leverage Jest's rich ecosystem — ts-jest, jest-extended, msw, and Testing Library — for robust, maintainable JavaScript and TypeScript unit tests.
