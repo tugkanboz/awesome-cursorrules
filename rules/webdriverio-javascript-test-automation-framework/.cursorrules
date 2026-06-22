@@ -1,0 +1,96 @@
+# Project: WebdriverIO JavaScript Test Automation Framework
+
+## Framework Structure
+- Use WebdriverIO as the primary test runner
+- Implement Page Object Model pattern with ES6 classes
+- Organize specs by feature areas
+- Use TypeScript for better type safety and autocompletion
+- Keep configuration in wdio.conf.ts
+
+## Coding Standards
+- Follow TypeScript best practices
+- Use ESLint with WebdriverIO recommended rules
+- Maximum line length: 100 characters
+- Use async/await for all async operations
+- Use meaningful, descriptive selector variables
+
+## Test Organization
+- Group tests using describe/it blocks
+- Use mocha or jasmine framework based on project needs
+- Implement proper test tagging with grep or suite filters
+- Create separate config files for local, staging, and production
+- Use spec file grouping for parallel execution
+
+## Best Practices
+- Prefer user-facing selectors: aria labels, roles, text content
+- Use $ and $$ for element queries; avoid raw CSS/XPath when possible
+- Use browser.pause() only as a last resort; prefer waitForDisplayed/waitForClickable
+- Implement retry logic for flaky network-dependent steps
+- Use browser.url() with base URL configuration
+- Avoid hardcoded timeouts; configure implicitTimeout globally
+
+## Element Handling
+- Use custom $ extensions or page object getters for reusable selectors
+- Prefer aria selectors (aria/button[name='Submit']) for accessibility
+- Implement waitForDisplayed before interaction with dynamic elements
+- Use shadow$ and shadow$$ for Shadow DOM elements
+- Handle iframes with browser.switchToFrame() and switchToParentFrame()
+
+## Page Object Model
+- Extend a base Page class with common actions (open, waitForLoad)
+- Keep selectors as private readonly getters
+- Expose only high-level action methods from page objects
+- Return the next page object from navigation actions
+- Place page objects in test/pageObjects/ directory
+
+## Test Data Management
+- Store test data in JSON fixtures or TypeScript constants
+- Use environment variables for credentials and environment-specific data
+- Use @wdio/shared-store-service for cross-spec data sharing
+- Never commit sensitive data; use .env files with dotenv
+
+## Assertions
+- Use expect-webdriverio matchers (expect(element).toBeDisplayed())
+- Prefer async matchers that have built-in retry logic
+- Avoid manual polling loops; let expect-webdriverio handle retries
+- Include meaningful failure messages in assertions
+
+## Configuration
+- Configure maxInstances for parallel execution
+- Set baseUrl in wdio.conf.ts for portability
+- Use @wdio/sauce-service or @wdio/browserstack-service for cloud grids
+- Enable video/screenshot on failure with afterTest hook
+- Use @wdio/allure-reporter or spec reporter for CI-friendly output
+
+## API & Component Testing
+- Use browser.call() to run Node.js HTTP requests inside tests
+- Use @wdio/browser-runner for component testing (React, Vue, Svelte)
+- Separate API helper utilities from UI page objects
+- Intercept and mock network requests with browser.mock()
+
+## Mobile Testing
+- Use Appium service (@wdio/appium-service) for native mobile automation
+- Configure separate wdio.mobile.conf.ts for iOS and Android
+- Use mobile$ selectors with accessibility IDs for cross-platform locators
+- Implement gesture helpers (swipe, scroll, tap) via @wdio/mobile-utils
+
+## Reporting
+- Use Allure Reporter for rich HTML test reports
+- Attach screenshots on failure via afterTest hook
+- Integrate with CI/CD pipeline using JUnit XML output
+- Use @wdio/spec-reporter for local development feedback
+
+## CI/CD Integration
+- Run tests in headless mode in CI environments
+- Use docker-compose with selenium-hub for containerized grid
+- Parallelize with maxInstances and shard strategies
+- Cache node_modules and wdio binaries between runs
+
+## Documentation
+- Document custom commands added to browser object
+- Maintain a README with setup, run, and debug instructions
+- Include examples of common patterns (auth, API mocking, file upload)
+- Document environment variable requirements in .env.example
+
+Remember to leverage WebdriverIO's auto-waiting and expect-webdriverio's built-in retry
+mechanisms to write stable, low-maintenance tests.
