@@ -1,0 +1,331 @@
+---
+description: Vue 3 + TypeScript component patterns — Composition API, script setup, composables, typed props/emits, and Pinia state management
+globs: **/*.vue,**/composables/**/*.ts,**/stores/**/*.ts,vite.config.*
+alwaysApply: false
+---
+# Vue 3 TypeScript Component Excellence
+
+## Script Setup: The Standard Approach
+
+- **Always use `<script setup lang="ts">`** — it's the recommended single-file component syntax in Vue 3
+- No need to manually `return` anything; top-level bindings are automatically exposed to the template
+- Pair with `<template>` and optional `<style scoped>` in every SFC
+
+```vue
+<!-- ✅ Standard SFC structure -->
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+
+interface Props {
+  title: string
+  count?: number
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  count: 0,
+})
+
+const emit = defineEmits<{
+  increment: [amount: number]
+  reset: []
+}>()
+
+const localCount = ref(props.count)
+const doubled = computed(() => localCount.value * 2)
+
+function handleIncrement() {
+  localCount.value++
+  emit('increment', localCount.value)
+}
+</script>
+
+<template>
+  <div class="counter">
+    <h2>{{ title }}</h2>
+    <p>Count: {{ localCount }} (×2 = {{ doubled }})</p>
+    <button @click="handleIncrement">Increment</button>
+    <button @click="emit('reset')">Reset</button>
+  </div>
+</template>
+
+<style scoped>
+.counter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+</style>
+```
+
+## Typed Props and Emits
+
+Use generic syntax with `defineProps<T>()` and `defineEmits<E>()` — never pass a plain object to avoid losing type inference.
+
+```vue
+<script setup lang="ts">
+// ✅ Typed props with defaults
+interface ButtonProps {
+  label: string
+  variant?: 'primary' | 'secondary' | 'danger'
+  size?: 'sm' | 'md' | 'lg'
+  disabled?: boolean
+  loading?: boolean
+}
+
+const props = withDefaults(defineProps<ButtonProps>(), {
+  variant: 'primary',
+  size: 'md',
+  disabled: false,
+  loading: false,
+})
+
+// ✅ Typed emits using tuple syntax (Vue 3.3+)
+const emit = defineEmits<{
+  click: [event: MouseEvent]
+  'update:modelValue': [value: string]
+}>()
+
+// ✅ v-model support
+const model = defineModel<string>({ default: '' })
+</script>
+
+<template>
+  <button
+    :class="['btn', `btn--${variant}`, `btn--${size}`]"
+    :disabled="disabled || loading"
+    :aria-busy="loading"
+    @click="emit('click', $event)"
+  >
+    <span v-if="loading" class="btn__spinner" aria-hidden="true" />
+    <slot>{{ label }}</slot>
+  </button>
+</template>
+```
+
+## Composables (Reusable Logic)
+
+Extract shared reactive logic into composables — the Composition API equivalent of custom hooks.
+
+```typescript
+// ✅ composables/useFetch.ts
+import { ref, shallowRef, watchEffect, toValue, type MaybeRefOrGetter } from 'vue'
+
+interface UseFetchReturn<T> {
+  data: Ref<T | null>
+  error: Ref<Error | null>
+  loading: Ref<boolean>
+}
+
+export function useFetch<T>(url: MaybeRefOrGetter<string>): UseFetchReturn<T> {
+  const data = shallowRef<T | null>(null)
+  const error = ref<Error | null>(null)
+  const loading = ref(false)
+
+  let controller: AbortController | null = null
+
+  watchEffect(async () => {
+    // Abort previous in-flight request when url changes
+    controller?.abort()
+    controller = new AbortController()
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const res = await fetch(toValue(url), { signal: controller.signal })
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+      data.value = (await res.json()) as T
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        error.value = err instanceof Error ? err : new Error(String(err))
+      }
+    } finally {
+      loading.value = false
+    }
+  })
+
+  return { data, error, loading }
+}
+```
+
+```vue
+<!-- ✅ Using the composable in a component -->
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useFetch } from '@/composables/useFetch'
+
+interface Product {
+  id: number
+  name: string
+  price: number
+}
+
+const { data: products, loading, error } = useFetch<Product[]>('/api/products')
+
+const total = computed(() =>
+  products.value?.reduce((sum, p) => sum + p.price, 0) ?? 0
+)
+</script>
+
+<template>
+  <div>
+    <p v-if="loading">Loading…</p>
+    <p v-else-if="error" role="alert">{{ error.message }}</p>
+    <ul v-else>
+      <li v-for="product in products" :key="product.id">
+        {{ product.name }} — ${{ product.price }}
+      </li>
+    </ul>
+    <p>Total: ${{ total }}</p>
+  </div>
+</template>
+```
+
+## Pinia State Management
+
+Use Pinia as the official Vue 3 state management library. Prefer the Setup Store syntax for TypeScript ergonomics.
+
+```typescript
+// ✅ stores/auth.ts — Setup Store (recommended)
+import { ref, computed } from 'vue'
+import { defineStore } from 'pinia'
+
+interface User {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'user'
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const isAuthenticated = computed(() => user.value !== null)
+  const isAdmin = computed(() => user.value?.role === 'admin')
+
+  async function login(email: string, password: string) {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await authApi.login({ email, password })
+      user.value = response.user
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Login failed'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function logout() {
+    user.value = null
+    error.value = null
+  }
+
+  return { user, loading, error, isAuthenticated, isAdmin, login, logout }
+})
+```
+
+```vue
+<!-- ✅ Using Pinia store in a component -->
+<script setup lang="ts">
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+
+// storeToRefs preserves reactivity when destructuring
+const { user, isAuthenticated, loading, error } = storeToRefs(authStore)
+const { login, logout } = authStore
+</script>
+
+<template>
+  <div v-if="isAuthenticated">
+    <p>Welcome, {{ user!.name }}</p>
+    <button @click="logout">Sign out</button>
+  </div>
+  <form v-else @submit.prevent="login(email, password)">
+    <!-- form fields -->
+  </form>
+</template>
+```
+
+## Reactive Patterns
+
+```typescript
+// ✅ Prefer ref() for primitives, reactive() for plain objects
+import { ref, reactive, computed, watch, watchEffect } from 'vue'
+
+// Primitives — always ref()
+const count = ref(0)
+const name = ref('')
+
+// Plain objects — reactive() is fine, but ref() also works
+const form = reactive({ email: '', password: '' })
+
+// ✅ Watch a single source
+watch(count, (newVal, oldVal) => {
+  console.log(`count changed from ${oldVal} to ${newVal}`)
+})
+
+// ✅ Watch multiple sources
+watch([count, name], ([newCount, newName]) => {
+  console.log(newCount, newName)
+})
+
+// ✅ watchEffect for side effects that track their own deps
+watchEffect(() => {
+  document.title = `${name.value} (${count.value})`
+})
+
+// ✅ Computed with getter and setter
+const fullName = computed({
+  get: () => `${firstName.value} ${lastName.value}`,
+  set: (val) => {
+    const [first, ...rest] = val.split(' ')
+    firstName.value = first
+    lastName.value = rest.join(' ')
+  },
+})
+```
+
+## Template Best Practices
+
+```vue
+<template>
+  <!-- ✅ Always use :key on v-for — use stable unique IDs, not index -->
+  <li v-for="item in items" :key="item.id">{{ item.name }}</li>
+
+  <!-- ✅ v-if and v-for on the same element: wrap with <template> -->
+  <template v-if="isVisible">
+    <li v-for="item in items" :key="item.id">{{ item.name }}</li>
+  </template>
+
+  <!-- ✅ Prefer v-show for frequently toggled elements -->
+  <div v-show="isExpanded">Expensive-to-render content</div>
+
+  <!-- ✅ Use defineAsyncComponent for heavy components -->
+  <Suspense>
+    <HeavyChart :data="chartData" />
+    <template #fallback><ChartSkeleton /></template>
+  </Suspense>
+
+  <!-- ✅ Event modifiers over manual checks -->
+  <form @submit.prevent="handleSubmit">
+    <input @keydown.enter.exact="handleEnter" />
+  </form>
+</template>
+```
+
+## Key Rules
+
+- Use `<script setup lang="ts">` — never Options API for new code
+- `defineModel()` (Vue 3.4+) replaces the manual `modelValue` prop + `update:modelValue` emit pattern
+- Destructuring `props` directly breaks reactivity — use `toRefs(props)` or access via `props.x`
+- Destructuring a Pinia store breaks reactivity — use `storeToRefs()` for state/getters, destructure actions directly
+- `shallowRef` / `shallowReactive` for large lists or external objects you don't want deeply observed
+- Place composables in `src/composables/`, stores in `src/stores/`, shared types in `src/types/`
+- `<style scoped>` prevents style leakage; use `:deep()` selector only when styling child component internals is unavoidable
