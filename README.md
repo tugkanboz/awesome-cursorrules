@@ -37,6 +37,7 @@ awesome-cursorrules/
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
 ├── 🎯 example-structures/          # Flat, focused .mdc structure examples
 │   ├── cypress/                    # testing-fundamentals, api-testing
+│   ├── nestjs/                     # module-architecture
 │   ├── next-js/                    # app-router-patterns
 │   ├── react-typescript/           # component-development
 │   └── selenium-python/            # architecture, page-objects, test-patterns

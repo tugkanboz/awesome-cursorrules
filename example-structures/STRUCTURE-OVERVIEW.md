@@ -54,6 +54,21 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### 🐦 NestJS
+```
+nestjs/
+├── .cursor/rules/
+│   └── module-architecture.mdc       # Modules, controllers, services, DTOs, guards, filters
+└── src/
+```
+
+**Key Features:**
+- **Module Architecture**: Feature-scoped modules with explicit exports and dependency injection
+- **Controller Patterns**: Routing-only controllers delegating to services, built-in pipes
+- **DTO Validation**: class-validator decorators with global ValidationPipe (whitelist + transform)
+- **Exception Handling**: Global HttpExceptionFilter for consistent error responses
+- **Guards**: JWT authentication guard with token extraction and verification
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions
@@ -107,6 +122,12 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 - **State Management**: Context API with reducer patterns
 - **Testing Integration**: Testing Library best practices
 
+### 4. NestJS Module Architecture
+- **Module Isolation**: Feature modules with TypeORM entity registration and selective exports
+- **Validation First**: Global ValidationPipe strips unknown fields and auto-transforms payloads
+- **Service Layer**: Business logic fully isolated from controllers; services throw typed NestJS exceptions
+- **Cross-cutting Concerns**: Guards for auth, exception filters for error shaping, all wired at bootstrap
+
 ## 📈 Real-World Impact
 
 ### Development Velocity
@@ -127,7 +148,7 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ## 🎉 Getting Started
 
 ### Quick Setup
-1. **Choose Framework**: Select from Selenium Python, Cypress, or React TypeScript
+1. **Choose Framework**: Select from Selenium Python, Cypress, React TypeScript, or NestJS
 2. **Copy Rules**: Copy `.mdc` files to your project's `.cursor/rules/` directory
 3. **Customize**: Adjust glob patterns and examples to match your project structure
 4. **Iterate**: Refine rules based on team feedback and project needs
