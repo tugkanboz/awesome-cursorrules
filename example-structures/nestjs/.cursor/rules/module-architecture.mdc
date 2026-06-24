@@ -1,0 +1,307 @@
+---
+description: NestJS module architecture — controllers, services, providers, DTOs with class-validator, exception filters, and guards
+globs: **/*.controller.ts,**/*.service.ts,**/*.module.ts,**/*.dto.ts,**/*.guard.ts,**/*.interceptor.ts,**/*.filter.ts,**/main.ts
+alwaysApply: false
+---
+# NestJS Module Architecture Excellence
+
+## Module Organization
+
+Every feature lives in its own module. Modules declare the controllers and providers they own and export what other modules may inject.
+
+```typescript
+// ✅ src/products/products.module.ts
+import { Module } from '@nestjs/common'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { ProductsController } from './products.controller'
+import { ProductsService } from './products.service'
+import { Product } from './entities/product.entity'
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Product])],
+  controllers: [ProductsController],
+  providers: [ProductsService],
+  exports: [ProductsService],   // export only what other modules genuinely need
+})
+export class ProductsModule {}
+```
+
+```typescript
+// ✅ src/app.module.ts — root module wires everything together
+import { Module } from '@nestjs/common'
+import { ConfigModule, ConfigService } from '@nestjs/config'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { ProductsModule } from './products/products.module'
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        url: config.getOrThrow<string>('DATABASE_URL'),
+        autoLoadEntities: true,
+        synchronize: config.get('NODE_ENV') !== 'production',
+      }),
+    }),
+    ProductsModule,
+  ],
+})
+export class AppModule {}
+```
+
+## Controllers
+
+Controllers handle routing only — no business logic. Delegate everything to the service layer.
+
+```typescript
+// ✅ src/products/products.controller.ts
+import {
+  Body, Controller, Delete, Get, Param, ParseUUIDPipe,
+  Post, Put, HttpCode, HttpStatus,
+} from '@nestjs/common'
+import { ProductsService } from './products.service'
+import { CreateProductDto } from './dto/create-product.dto'
+import { UpdateProductDto } from './dto/update-product.dto'
+
+@Controller('products')
+export class ProductsController {
+  constructor(private readonly productsService: ProductsService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(@Body() dto: CreateProductDto) {
+    return this.productsService.create(dto)
+  }
+
+  @Get()
+  findAll() {
+    return this.productsService.findAll()
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.productsService.findOneOrFail(id)
+  }
+
+  @Put(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProductDto,
+  ) {
+    return this.productsService.update(id, dto)
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.productsService.remove(id)
+  }
+}
+```
+
+## Services and Providers
+
+Services contain business logic and are the single source of truth for a feature.
+
+```typescript
+// ✅ src/products/products.service.ts
+import { Injectable, NotFoundException } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
+import { Product } from './entities/product.entity'
+import { CreateProductDto } from './dto/create-product.dto'
+import { UpdateProductDto } from './dto/update-product.dto'
+
+@Injectable()
+export class ProductsService {
+  constructor(
+    @InjectRepository(Product)
+    private readonly repo: Repository<Product>,
+  ) {}
+
+  create(dto: CreateProductDto): Promise<Product> {
+    const product = this.repo.create(dto)
+    return this.repo.save(product)
+  }
+
+  findAll(): Promise<Product[]> {
+    return this.repo.find({ order: { createdAt: 'DESC' } })
+  }
+
+  async findOneOrFail(id: string): Promise<Product> {
+    const product = await this.repo.findOneBy({ id })
+    if (!product) {
+      throw new NotFoundException(`Product ${id} not found`)
+    }
+    return product
+  }
+
+  async update(id: string, dto: UpdateProductDto): Promise<Product> {
+    const product = await this.findOneOrFail(id)
+    Object.assign(product, dto)
+    return this.repo.save(product)
+  }
+
+  async remove(id: string): Promise<void> {
+    const product = await this.findOneOrFail(id)
+    await this.repo.remove(product)
+  }
+}
+```
+
+## DTOs with Validation
+
+Use `class-validator` decorators on DTOs. Apply `ValidationPipe` globally in `main.ts` with `whitelist: true` to strip unknown properties.
+
+```typescript
+// ✅ src/products/dto/create-product.dto.ts
+import { IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator'
+
+export class CreateProductDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  name: string
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(1000)
+  description?: string
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  price: number
+}
+```
+
+```typescript
+// ✅ src/products/dto/update-product.dto.ts
+import { PartialType } from '@nestjs/mapped-types'
+import { CreateProductDto } from './create-product.dto'
+
+// PartialType makes all fields optional and preserves validators
+export class UpdateProductDto extends PartialType(CreateProductDto) {}
+```
+
+```typescript
+// ✅ src/main.ts — global pipe + exception filter bootstrap
+import { NestFactory } from '@nestjs/core'
+import { ValidationPipe } from '@nestjs/common'
+import { AppModule } from './app.module'
+import { HttpExceptionFilter } from './common/filters/http-exception.filter'
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule)
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,        // strip properties not in DTO
+      forbidNonWhitelisted: true,
+      transform: true,        // auto-transform payloads to DTO class instances
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
+
+  app.useGlobalFilters(new HttpExceptionFilter())
+
+  await app.listen(process.env.PORT ?? 3000)
+}
+
+bootstrap()
+```
+
+## Exception Filters
+
+Catch and shape error responses in one place rather than in each controller.
+
+```typescript
+// ✅ src/common/filters/http-exception.filter.ts
+import {
+  ArgumentsHost, Catch, ExceptionFilter,
+  HttpException, HttpStatus, Logger,
+} from '@nestjs/common'
+import { Request, Response } from 'express'
+
+@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name)
+
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp()
+    const response = ctx.getResponse<Response>()
+    const request = ctx.getRequest<Request>()
+    const status = exception.getStatus()
+    const exceptionResponse = exception.getResponse()
+
+    const message =
+      typeof exceptionResponse === 'object' && 'message' in exceptionResponse
+        ? (exceptionResponse as { message: unknown }).message
+        : exception.message
+
+    this.logger.error(`${request.method} ${request.url} → ${status}`)
+
+    response.status(status).json({
+      statusCode: status,
+      message,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    })
+  }
+}
+```
+
+## Guards
+
+Guards implement `CanActivate` and decide whether the current request is allowed to proceed.
+
+```typescript
+// ✅ src/common/guards/jwt-auth.guard.ts
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
+import { ConfigService } from '@nestjs/config'
+import { Request } from 'express'
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly config: ConfigService,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<Request>()
+    const token = this.extractToken(request)
+
+    if (!token) {
+      throw new UnauthorizedException('Missing bearer token')
+    }
+
+    try {
+      request['user'] = await this.jwtService.verifyAsync(token, {
+        secret: this.config.getOrThrow<string>('JWT_SECRET'),
+      })
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token')
+    }
+
+    return true
+  }
+
+  private extractToken(request: Request): string | undefined {
+    const [type, token] = request.headers.authorization?.split(' ') ?? []
+    return type === 'Bearer' ? token : undefined
+  }
+}
+```
+
+## Key Rules
+
+- One module per feature domain; never put business logic in controllers
+- Always use `ValidationPipe` with `whitelist: true` globally — never validate manually in controllers
+- Use `PartialType` / `IntersectionType` from `@nestjs/mapped-types` for DTO composition instead of rewriting classes
+- Throw NestJS built-in exceptions (`NotFoundException`, `BadRequestException`, etc.) from services — let filters shape the response
+- Use `ConfigService.getOrThrow()` for required env variables so the app fails fast at startup if config is missing
+- Register `TypeOrmModule.forFeature([Entity])` only in the module that owns the entity; other modules import that module
+- Avoid circular module dependencies — extract shared logic into a `CommonModule` or `SharedModule`
