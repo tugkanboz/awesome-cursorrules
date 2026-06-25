@@ -1,0 +1,163 @@
+# Project: pytest Python Unit Test Framework
+
+## Framework Structure
+- Use pytest as the primary test runner for Python projects
+- Organize tests in a dedicated tests/ directory mirroring the src/ structure
+- Use pyproject.toml or pytest.ini for centralized configuration
+- Separate unit, integration, and functional tests into distinct subdirectories
+
+## Coding Standards
+- Follow PEP 8 style guide with Black formatter (line length: 88)
+- Use type hints for all test functions and fixtures
+- Name test files with test_ prefix (test_user_service.py) or _test suffix
+- Name test functions with test_ prefix describing the scenario (test_returns_none_when_not_found)
+
+## Fixture Design
+- Define shared fixtures in conftest.py at the appropriate directory level
+- Use the narrowest scope possible: function (default) > class > module > session
+- Prefer yield fixtures for setup/teardown to keep logic together
+- Avoid returning mutable global state from session-scoped fixtures
+- Parametrize fixtures when the same fixture needs multiple configurations
+
+```python
+# conftest.py
+import pytest
+from myapp import create_app, db as _db
+
+@pytest.fixture(scope="session")
+def app():
+    app = create_app({"TESTING": True, "DATABASE_URL": "sqlite:///:memory:"})
+    yield app
+
+@pytest.fixture(scope="function")
+def db(app):
+    with app.app_context():
+        _db.create_all()
+        yield _db
+        _db.drop_all()
+
+@pytest.fixture
+def user(db):
+    from myapp.models import User
+    u = User(email="test@example.com")
+    db.session.add(u)
+    db.session.commit()
+    return u
+```
+
+## Test Organization
+- Group related tests in classes (TestUserService) for shared fixtures and logical grouping
+- Keep each test focused on a single behaviour; one assert per logical outcome
+- Use descriptive names: test_create_user_raises_value_error_when_email_is_blank
+- Follow Arrange-Act-Assert (AAA) pattern with blank lines between sections
+
+## Parametrize
+- Use @pytest.mark.parametrize for data-driven tests instead of for-loops inside tests
+- Include an ids argument for readable test names in the output
+- Combine multiple @parametrize decorators for cross-product scenarios sparingly
+
+```python
+@pytest.mark.parametrize(
+    ("email", "expected_error"),
+    [
+        ("", "Email cannot be blank"),
+        ("not-an-email", "Invalid email format"),
+        ("a" * 255 + "@x.com", "Email too long"),
+    ],
+    ids=["blank", "invalid_format", "too_long"],
+)
+def test_create_user_validates_email(email, expected_error):
+    with pytest.raises(ValueError, match=expected_error):
+        User.create(email=email)
+```
+
+## Markers
+- Register custom markers in pyproject.toml to avoid PytestUnknownMarkWarning
+- Use built-in marks: @pytest.mark.skip, @pytest.mark.skipif, @pytest.mark.xfail
+- Tag tests with domain markers (smoke, slow, integration) for selective execution
+- Use @pytest.mark.usefixtures for fixtures not needed as function arguments
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+markers = [
+    "smoke: fast sanity checks run on every push",
+    "slow: tests taking more than 1 second",
+    "integration: require external services",
+]
+```
+
+## Mocking
+- Use pytest-mock's mocker fixture instead of unittest.mock.patch decorators
+- Patch at the point of use, not at the definition site
+- Use mocker.patch.object for instance methods; mocker.patch for module-level names
+- Assert mock calls explicitly with assert_called_once_with or assert_any_call
+- Restore mocks automatically — pytest-mock handles teardown per test
+
+```python
+def test_sends_welcome_email(mocker):
+    send = mocker.patch("myapp.email.send_email")
+    UserService.create(email="new@example.com")
+    send.assert_called_once_with(to="new@example.com", subject="Welcome")
+```
+
+## Async Testing
+- Install pytest-asyncio and set asyncio_mode = "auto" in pyproject.toml
+- Mark async test functions with @pytest.mark.asyncio when not in auto mode
+- Use anyio for framework-agnostic async fixtures
+- Keep async fixtures at the appropriate scope; avoid session-scoped async fixtures with trio
+
+## Assertions
+- Use plain assert statements; pytest rewrites them for detailed failure output
+- Use pytest.raises as a context manager, not with expected_exception= argument
+- Match specific error messages with pytest.raises(ExcType, match=r"pattern")
+- Use pytest.approx for floating-point comparisons
+
+## Coverage
+- Configure pytest-cov in pyproject.toml; run with --cov=src --cov-report=term-missing
+- Set minimum thresholds with --cov-fail-under=80 in CI
+- Exclude non-testable files (migrations, __init__.py) with omit patterns
+- Generate HTML reports locally for visual branch-coverage analysis
+
+```toml
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/migrations/*", "*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+```
+
+## Test Data Management
+- Use factory_boy or polyfactory for model factories instead of hardcoded dicts
+- Keep fixtures small; build only the minimum state needed for the test
+- Use tmp_path fixture for tests that read/write files
+- Store large static fixtures in tests/fixtures/ as JSON or YAML files
+
+## Plugin Ecosystem
+- pytest-mock: mocker fixture for clean patch/spy/stub API
+- pytest-asyncio: async test and fixture support
+- pytest-cov: coverage integration
+- pytest-xdist: parallel execution with -n auto
+- pytest-httpx or responses: mock HTTP calls without real network
+- freezegun / time-machine: freeze datetime in tests
+
+## Performance
+- Run independent tests in parallel with pytest-xdist (-n auto)
+- Mark slow tests and skip them in fast feedback loops (-m "not slow")
+- Use session-scoped fixtures for expensive resources (database schema creation)
+- Avoid importing heavy modules at collection time; import inside tests when needed
+
+## CI/CD Integration
+- Generate JUnit XML output with --junitxml=reports/junit.xml
+- Cache the .pytest_cache directory between CI runs
+- Run --tb=short in CI for concise tracebacks; use --tb=long locally
+- Split test suites with --dist=loadscope in pytest-xdist for balanced parallel runs
+
+## Documentation
+- Write one-line docstrings for non-obvious test scenarios
+- Maintain a tests/README.md describing test categories, fixtures, and how to run
+- Document custom markers and their intended use in pyproject.toml comments
+
+Remember to leverage pytest's powerful fixture dependency injection and plugin system to keep tests readable, isolated, and fast.
