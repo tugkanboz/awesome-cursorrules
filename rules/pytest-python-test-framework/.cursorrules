@@ -1,0 +1,82 @@
+# Project: pytest Python Test Framework
+
+## Framework Structure
+- Use pytest as the primary test runner for Python projects
+- Organize tests in a dedicated tests/ directory mirroring the source layout
+- Use conftest.py files for shared fixtures at each directory level
+- Separate unit, integration, and end-to-end tests into distinct subdirectories
+
+## Coding Standards
+- Follow PEP 8 style guide with black for formatting (line length: 88)
+- Use type hints in test functions and fixtures
+- Use snake_case for all test function and variable names
+- Prefix test files with test_ and test functions with test_
+
+## Test Organization
+- Group related tests in classes prefixed with Test (no __init__ needed)
+- Use pytest markers (@pytest.mark.*) to categorize tests (smoke, regression, slow)
+- Register custom markers in pytest.ini or pyproject.toml to avoid warnings
+- Use parametrize for data-driven tests instead of duplicating test logic
+
+## Fixtures
+- Define fixtures in conftest.py for cross-module reuse
+- Choose the narrowest appropriate scope (function, class, module, session)
+- Use yield fixtures for setup/teardown instead of setup_method/teardown_method
+- Prefer explicit fixture injection over base test classes
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern within each test
+- Write focused, single-responsibility tests covering one behavior each
+- Avoid test interdependencies; each test must be runnable in isolation
+- Use pytest-xdist (-n auto) for parallel test execution on independent suites
+- Use tmp_path fixture for temporary file operations instead of hardcoded paths
+
+## Mocking Strategies
+- Use unittest.mock.patch or pytest-mock's mocker fixture for patching
+- Prefer mocker.patch over direct unittest.mock usage for automatic cleanup
+- Use monkeypatch fixture for environment variable and attribute overrides
+- Avoid over-mocking; integration tests should hit real implementations
+
+## Assertions
+- Use plain assert statements; pytest rewrites them for detailed failure output
+- Use pytest.raises() as a context manager to assert expected exceptions
+- Use pytest.approx() for floating-point comparisons
+- Add a short message to assert only when the failure reason is not self-evident
+
+## Test Data Management
+- Use factory functions or fixtures for reusable test data objects
+- Store static test data in fixtures or dedicated data files (JSON/YAML)
+- Avoid hardcoded magic values; use named constants or parametrize labels
+- Use faker or hypothesis for property-based and fuzz testing when appropriate
+
+## Coverage
+- Configure coverage with pytest-cov (--cov=src --cov-report=html)
+- Set minimum coverage thresholds in pyproject.toml [tool.coverage.report]
+- Exclude non-testable code (migrations, __main__, type-checking blocks) via omit
+- Review branch coverage alongside line coverage for conditional logic
+
+## Configuration
+- Centralize pytest settings in pyproject.toml under [tool.pytest.ini_options]
+- Define testpaths, python_files, python_classes, python_functions explicitly
+- Use filterwarnings to promote relevant warnings to errors during tests
+- Store environment-specific values in .env files loaded via pytest-dotenv
+
+## CI/CD Integration
+- Use --tb=short and -q flags in CI for concise output
+- Output JUnit XML with --junitxml=report.xml for pipeline result parsing
+- Cache the .pytest_cache and virtual environment between runs
+- Run the full suite with --strict-markers to catch unregistered marker typos
+
+## Error Handling
+- Test both success paths and expected failure paths for every public function
+- Use parametrize to cover boundary values and edge cases systematically
+- Assert on specific exception types and messages, not just that an exception occurred
+- Log meaningful context in fixture teardown to aid debugging of CI failures
+
+## Documentation
+- Write a single-line docstring on complex tests explaining the scenario under test
+- Maintain a conftest.py header comment listing the fixtures defined in that file
+- Document custom markers and their intended usage in pyproject.toml comments
+- Keep a CONTRIBUTING.md section on how to run tests locally and in CI
+
+Remember to keep tests fast, isolated, and deterministic — a slow or flaky test suite erodes developer trust and delays delivery.
