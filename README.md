@@ -38,6 +38,7 @@ awesome-cursorrules/
 ├── 🎯 example-structures/          # Flat, focused .mdc structure examples
 │   ├── cypress/                    # testing-fundamentals, api-testing
 │   ├── next-js/                    # app-router-patterns
+│   ├── playwright/                 # e2e-testing-patterns
 │   ├── react-typescript/           # component-development
 │   └── selenium-python/            # architecture, page-objects, test-patterns
 └── 📖 legacy-migration/            # Before/after migration guides
