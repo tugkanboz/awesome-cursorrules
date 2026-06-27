@@ -1,0 +1,299 @@
+---
+description: Playwright e2e testing patterns — Page Object Model, fixtures, locator best practices, API mocking, and CI configuration
+globs: **/*.spec.ts,**/*.spec.js,**/playwright.config.*,**/tests/**/*.ts,**/e2e/**/*.ts,**/pages/**/*.ts
+alwaysApply: false
+---
+# Playwright E2E Testing Excellence
+
+## Locator Strategy
+
+- **Prefer user-facing attributes** over CSS selectors or XPath
+- Use `getByRole`, `getByLabel`, `getByText`, `getByTestId` — in that order of preference
+- `data-testid` attributes are the reliable fallback when semantic locators are ambiguous
+- Never rely on positional selectors like `nth-child`, class names, or IDs generated at runtime
+
+```typescript
+// ✅ Semantic locators — resilient to markup changes
+await page.getByRole('button', { name: 'Sign in' }).click()
+await page.getByLabel('Email address').fill('user@example.com')
+await page.getByRole('heading', { name: 'Dashboard' }).waitFor()
+
+// ✅ data-testid as explicit fallback
+await page.getByTestId('submit-button').click()
+
+// ❌ Fragile — breaks on styling or DOM structure changes
+await page.locator('.btn-primary').click()
+await page.locator('#dynamicId123').fill('value')
+await page.locator('div > ul > li:nth-child(2) > a').click()
+```
+
+## Page Object Model
+
+Encapsulate page interactions in classes that expose intent-level methods, not raw selectors.
+
+```typescript
+// tests/pages/login.page.ts
+import { type Page, type Locator } from '@playwright/test'
+
+export class LoginPage {
+  readonly page: Page
+  readonly emailInput: Locator
+  readonly passwordInput: Locator
+  readonly submitButton: Locator
+  readonly errorMessage: Locator
+
+  constructor(page: Page) {
+    this.page = page
+    this.emailInput = page.getByLabel('Email address')
+    this.passwordInput = page.getByLabel('Password')
+    this.submitButton = page.getByRole('button', { name: 'Sign in' })
+    this.errorMessage = page.getByRole('alert')
+  }
+
+  async goto() {
+    await this.page.goto('/login')
+  }
+
+  async login(email: string, password: string) {
+    await this.emailInput.fill(email)
+    await this.passwordInput.fill(password)
+    await this.submitButton.click()
+  }
+
+  async expectError(message: string) {
+    await expect(this.errorMessage).toContainText(message)
+  }
+}
+```
+
+```typescript
+// tests/auth.spec.ts
+import { test, expect } from '@playwright/test'
+import { LoginPage } from './pages/login.page'
+
+test.describe('Authentication', () => {
+  test('should sign in with valid credentials', async ({ page }) => {
+    const loginPage = new LoginPage(page)
+    await loginPage.goto()
+    await loginPage.login('user@example.com', 'secret123')
+
+    await expect(page).toHaveURL('/dashboard')
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+  })
+
+  test('should show error for invalid credentials', async ({ page }) => {
+    const loginPage = new LoginPage(page)
+    await loginPage.goto()
+    await loginPage.login('user@example.com', 'wrongpassword')
+
+    await loginPage.expectError('Invalid email or password')
+  })
+})
+```
+
+## Fixtures for Shared Setup
+
+Use Playwright fixtures to share authenticated state, database seeds, and page object instances across tests.
+
+```typescript
+// tests/fixtures.ts
+import { test as base, expect } from '@playwright/test'
+import { LoginPage } from './pages/login.page'
+import { DashboardPage } from './pages/dashboard.page'
+
+type Fixtures = {
+  loginPage: LoginPage
+  dashboardPage: DashboardPage
+  authenticatedPage: Page
+}
+
+export const test = base.extend<Fixtures>({
+  loginPage: async ({ page }, use) => {
+    await use(new LoginPage(page))
+  },
+
+  dashboardPage: async ({ page }, use) => {
+    await use(new DashboardPage(page))
+  },
+
+  // Re-use stored auth state — avoids logging in on every test
+  authenticatedPage: async ({ browser }, use) => {
+    const context = await browser.newContext({
+      storageState: 'playwright/.auth/user.json',
+    })
+    const page = await context.newPage()
+    await use(page)
+    await context.close()
+  },
+})
+
+export { expect }
+```
+
+```typescript
+// tests/dashboard.spec.ts — uses custom fixtures
+import { test, expect } from './fixtures'
+
+test('should display user statistics', async ({ authenticatedPage }) => {
+  await authenticatedPage.goto('/dashboard')
+  await expect(authenticatedPage.getByTestId('stats-panel')).toBeVisible()
+})
+```
+
+## Global Auth Setup
+
+Authenticate once per worker and reuse the session — drastically reduces test suite runtime.
+
+```typescript
+// tests/global-setup.ts
+import { chromium, type FullConfig } from '@playwright/test'
+
+async function globalSetup(config: FullConfig) {
+  const { baseURL } = config.projects[0].use
+  const browser = await chromium.launch()
+  const page = await browser.newPage()
+
+  await page.goto(`${baseURL}/login`)
+  await page.getByLabel('Email address').fill(process.env.TEST_USER_EMAIL!)
+  await page.getByLabel('Password').fill(process.env.TEST_USER_PASSWORD!)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL('/dashboard')
+
+  // Save auth state so tests can reuse it
+  await page.context().storageState({ path: 'playwright/.auth/user.json' })
+  await browser.close()
+}
+
+export default globalSetup
+```
+
+## API Mocking with `route`
+
+Intercept network requests to isolate UI tests from backend availability.
+
+```typescript
+test('should display products from API', async ({ page }) => {
+  // Mock before navigation so no real request is sent
+  await page.route('**/api/products', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { id: '1', name: 'Widget A', price: 9.99 },
+        { id: '2', name: 'Widget B', price: 19.99 },
+      ]),
+    })
+  })
+
+  await page.goto('/products')
+  await expect(page.getByText('Widget A')).toBeVisible()
+  await expect(page.getByText('Widget B')).toBeVisible()
+})
+
+test('should handle API errors gracefully', async ({ page }) => {
+  await page.route('**/api/products', (route) =>
+    route.fulfill({ status: 500 })
+  )
+
+  await page.goto('/products')
+  await expect(page.getByRole('alert')).toContainText('Failed to load products')
+})
+```
+
+## Assertions
+
+Use Playwright's built-in async assertions — they auto-retry until the condition is met or the timeout expires.
+
+```typescript
+// ✅ Auto-retrying web-first assertions
+await expect(page.getByRole('status')).toHaveText('Saved')
+await expect(page.getByTestId('loader')).not.toBeVisible()
+await expect(page).toHaveURL('/success')
+await expect(page).toHaveTitle(/Checkout complete/)
+await expect(page.getByRole('listitem')).toHaveCount(5)
+
+// ✅ Soft assertions — collect all failures before throwing
+await expect.soft(page.getByTestId('name')).toHaveText('Alice')
+await expect.soft(page.getByTestId('role')).toHaveText('Admin')
+// Both checked; test fails at the end with combined report
+
+// ❌ Don't use manual waits or polling
+await page.waitForTimeout(2000)                // arbitrary sleep
+await new Promise((r) => setTimeout(r, 1000)) // same problem
+```
+
+## Configuration
+
+```typescript
+// playwright.config.ts
+import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './tests',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: [
+    ['html'],
+    ['junit', { outputFile: 'results.xml' }],
+  ],
+  globalSetup: require.resolve('./tests/global-setup'),
+  use: {
+    baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'on-first-retry',
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'mobile-chrome', use: { ...devices['Pixel 5'] } },
+  ],
+  webServer: {
+    command: 'npm run start',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+  },
+})
+```
+
+## CI Configuration (GitHub Actions)
+
+```yaml
+# .github/workflows/playwright.yml
+name: Playwright Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+        env:
+          BASE_URL: ${{ vars.BASE_URL }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+```
+
+## Key Rules
+
+- Store auth state in `playwright/.auth/` and add it to `.gitignore`
+- Use `test.describe` to group related tests; use `test.beforeEach` for shared navigation only
+- Avoid `page.waitForSelector` — prefer `expect(locator).toBeVisible()` with auto-retry
+- Set `baseURL` in config so tests use relative paths (`/login` not `http://...`)
+- Use `--project=chromium` locally for speed; run all projects in CI
+- Keep Page Object methods at the interaction level — no assertions inside them; assert in tests
