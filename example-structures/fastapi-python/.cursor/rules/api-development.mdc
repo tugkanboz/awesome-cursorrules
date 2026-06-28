@@ -1,0 +1,283 @@
+---
+description: FastAPI Python backend development — async endpoints, Pydantic v2 models, dependency injection, SQLAlchemy async patterns, and pytest testing
+globs: **/*.py,**/routers/**/*.py,**/models/**/*.py,**/schemas/**/*.py,**/api/**/*.py,**/services/**/*.py
+alwaysApply: false
+---
+# FastAPI Python Backend Excellence
+
+## Project Architecture
+- Organize code by feature: `routers/`, `models/`, `schemas/`, `services/`, `dependencies/`
+- Use `APIRouter` per domain, register them on the main `app` in `main.py`
+- Apply repository pattern to isolate database access from business logic
+- Inject every external resource (DB session, auth user) via `Depends()`
+
+## Application Lifespan & Setup
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()          # run migrations / warm connection pool
+    yield
+    await close_db()         # graceful shutdown
+
+app = FastAPI(
+    title="My API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.include_router(users_router, prefix="/api/v1")
+app.include_router(items_router, prefix="/api/v1")
+```
+
+## Pydantic v2 Schema Patterns
+- Use separate `*Base`, `*Create`, `*Update`, and `*Response` models
+- Add field validators for business-rule constraints
+- Set `model_config = {"from_attributes": True}` on response models to work with ORM objects
+
+```python
+from pydantic import BaseModel, EmailStr, field_validator, model_config
+from typing import Optional
+from datetime import datetime
+
+class UserBase(BaseModel):
+    email: EmailStr
+    name: str
+
+class UserCreate(UserBase):
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def strong_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        return v
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+class UserResponse(UserBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+```
+
+## Async Endpoint Patterns
+- Use `async def` for all endpoints that touch I/O
+- Raise `HTTPException` with explicit `status_code` and `detail`
+- Annotate `response_model` and `status_code` on every route decorator
+
+```python
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> UserResponse:
+    user = await user_service.get_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+
+@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    payload: UserCreate,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    if await user_service.get_by_email(db, payload.email):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+    return await user_service.create(db, payload)
+
+@router.patch("/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> UserResponse:
+    user = await user_service.get_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return await user_service.update(db, user, payload)
+```
+
+## Dependency Injection
+- Define reusable `Depends()` callables in a dedicated `dependencies/` module
+- Keep auth logic behind a single `get_current_active_user` dependency
+- Manage DB session lifecycle (commit / rollback) inside `get_db`
+
+```python
+from typing import AsyncGenerator
+from fastapi import Depends, Security, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
+
+security = HTTPBearer()
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+async def get_current_active_user(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    user = await auth_service.verify_token(db, credentials.credentials)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+    return user
+```
+
+## Async SQLAlchemy Patterns
+- Use `async_session_factory` (from `AsyncSession`) for all DB operations
+- Prefer `select()` + `scalars()` over legacy `Query` API
+- Use `selectinload` / `joinedload` to avoid N+1 queries
+
+```python
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+class UserRepository:
+    async def get_by_id(self, db: AsyncSession, user_id: int) -> User | None:
+        result = await db.execute(
+            select(User).where(User.id == user_id).options(selectinload(User.posts))
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_email(self, db: AsyncSession, email: str) -> User | None:
+        result = await db.execute(select(User).where(User.email == email))
+        return result.scalar_one_or_none()
+
+    async def list_active(
+        self, db: AsyncSession, *, skip: int = 0, limit: int = 100
+    ) -> list[User]:
+        result = await db.execute(
+            select(User).where(User.is_active == True).offset(skip).limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def create(self, db: AsyncSession, payload: UserCreate) -> User:
+        user = User(
+            email=payload.email,
+            name=payload.name,
+            hashed_password=hash_password(payload.password),
+        )
+        db.add(user)
+        await db.flush()
+        await db.refresh(user)
+        return user
+```
+
+## Testing with pytest-asyncio and httpx
+- Use `AsyncClient` with `ASGITransport` for in-process endpoint tests
+- Override `get_db` in the app's dependency overrides to use a test transaction
+- Roll back the test transaction after each test for isolation
+
+```python
+import pytest
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+@pytest.fixture(scope="session")
+def engine():
+    return create_async_engine(TEST_DATABASE_URL)
+
+@pytest.fixture
+async def db(engine):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        yield session
+        await session.rollback()
+
+@pytest.fixture
+async def client(db: AsyncSession):
+    app.dependency_overrides[get_db] = lambda: db
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()
+
+@pytest.mark.asyncio
+async def test_create_user(client: AsyncClient):
+    response = await client.post(
+        "/api/v1/users/",
+        json={"email": "alice@example.com", "name": "Alice", "password": "StrongPass1"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["email"] == "alice@example.com"
+    assert "id" in body
+
+@pytest.mark.asyncio
+async def test_create_user_duplicate_email(client: AsyncClient):
+    payload = {"email": "bob@example.com", "name": "Bob", "password": "StrongPass1"}
+    await client.post("/api/v1/users/", json=payload)
+    response = await client.post("/api/v1/users/", json=payload)
+    assert response.status_code == 409
+
+@pytest.mark.asyncio
+async def test_get_user_not_found(client: AsyncClient, auth_headers: dict):
+    response = await client.get("/api/v1/users/99999", headers=auth_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found"
+```
+
+## Global Error Handling
+- Register exception handlers on `app` for consistent error responses
+- Log unexpected exceptions with full context before returning 500
+
+```python
+import logging
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+
+logger = logging.getLogger(__name__)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+```

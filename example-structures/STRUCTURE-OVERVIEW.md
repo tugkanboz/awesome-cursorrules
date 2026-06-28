@@ -54,6 +54,21 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### ⚡ FastAPI Python
+```
+fastapi-python/
+├── .cursor/rules/
+│   └── api-development.mdc           # Async endpoints, Pydantic v2, SQLAlchemy, testing
+└── src/
+```
+
+**Key Features:**
+- **Async-First Architecture**: `lifespan`, `APIRouter`, and `async def` patterns throughout
+- **Pydantic v2 Schemas**: Separate request/response models, `field_validator`, `model_config`
+- **Dependency Injection**: `Depends()` for DB sessions, authentication, and shared services
+- **SQLAlchemy Async**: Repository pattern with `select()`, `scalar_one_or_none()`, eager loading
+- **pytest + httpx Testing**: In-process `AsyncClient`, per-test transaction rollback, dep overrides
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions
@@ -107,6 +122,13 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 - **State Management**: Context API with reducer patterns
 - **Testing Integration**: Testing Library best practices
 
+### 4. FastAPI Python Backend
+- **Async Endpoints**: `lifespan`, versioned routers, explicit status codes and response models
+- **Pydantic v2 Models**: Separate `*Create` / `*Response` schemas, custom validators
+- **Dependency Injection**: Composable `Depends()` for DB sessions and auth
+- **SQLAlchemy Async**: Repository pattern, `selectinload` for eager loading, N+1 prevention
+- **pytest + httpx Testing**: `AsyncClient` with `ASGITransport`, dependency override, DB rollback
+
 ## 📈 Real-World Impact
 
 ### Development Velocity
@@ -127,7 +149,7 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ## 🎉 Getting Started
 
 ### Quick Setup
-1. **Choose Framework**: Select from Selenium Python, Cypress, or React TypeScript
+1. **Choose Framework**: Select from Selenium Python, Cypress, React TypeScript, or FastAPI Python
 2. **Copy Rules**: Copy `.mdc` files to your project's `.cursor/rules/` directory
 3. **Customize**: Adjust glob patterns and examples to match your project structure
 4. **Iterate**: Refine rules based on team feedback and project needs
