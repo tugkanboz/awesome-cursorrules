@@ -54,6 +54,21 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### 🔶 SvelteKit
+```
+sveltekit/
+├── .cursor/rules/
+│   └── app-development.mdc           # Routing, load functions, form actions, stores
+└── src/
+```
+
+**Key Features:**
+- **File-Based Routing**: `+page.svelte`, `+layout.svelte`, `+server.ts` conventions
+- **Load Functions**: Server-only vs universal load, parallel data fetching
+- **Form Actions**: Progressive enhancement with `use:enhance`, `fail()`, `redirect()`
+- **Svelte Stores**: `writable`, `derived`, custom store factories
+- **Server Boundaries**: `$lib/server/` isolation, hooks middleware, `locals`
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions
@@ -127,7 +142,7 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ## 🎉 Getting Started
 
 ### Quick Setup
-1. **Choose Framework**: Select from Selenium Python, Cypress, or React TypeScript
+1. **Choose Framework**: Select from Selenium Python, Cypress, React TypeScript, or SvelteKit
 2. **Copy Rules**: Copy `.mdc` files to your project's `.cursor/rules/` directory
 3. **Customize**: Adjust glob patterns and examples to match your project structure
 4. **Iterate**: Refine rules based on team feedback and project needs
