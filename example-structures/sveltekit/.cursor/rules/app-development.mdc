@@ -1,0 +1,330 @@
+---
+description: SvelteKit app development patterns — routing, load functions, form actions, stores, and server-side rendering
+globs: **/src/routes/**/*.svelte,**/src/routes/**/*.ts,**/src/routes/**/*.js,**/src/lib/**/*.svelte,**/src/lib/**/*.ts,**/svelte.config.*
+alwaysApply: false
+---
+# SvelteKit App Development Excellence
+
+## Project Structure
+
+```
+src/
+├── routes/
+│   ├── +layout.svelte       # Root layout wrapping all pages
+│   ├── +layout.ts           # Layout load function (runs on client + server)
+│   ├── +layout.server.ts    # Server-only layout load function
+│   ├── +page.svelte         # Page component rendered at /
+│   ├── +page.ts             # Page load function
+│   ├── +page.server.ts      # Server-only load + form actions
+│   ├── +error.svelte        # Error boundary for this segment
+│   └── products/
+│       ├── +page.svelte
+│       ├── +page.server.ts
+│       └── [id]/
+│           ├── +page.svelte
+│           └── +page.server.ts
+├── lib/
+│   ├── components/          # Reusable Svelte components
+│   ├── stores/              # Svelte stores (writable, derived, readable)
+│   ├── server/              # Server-only modules (never imported on client)
+│   └── utils/              # Shared utilities
+└── app.html                 # HTML shell
+```
+
+## Load Functions
+
+Use `+page.server.ts` when data requires secrets, direct DB access, or must not reach the client. Use `+page.ts` for public API calls that can run on both server and client.
+
+```typescript
+// ✅ src/routes/products/+page.server.ts
+import type { PageServerLoad } from './$types'
+import { db } from '$lib/server/db'
+import { error } from '@sveltejs/kit'
+
+export const load: PageServerLoad = async ({ params, locals }) => {
+  const products = await db.product.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
+
+  return { products }
+}
+
+// ✅ src/routes/products/[id]/+page.server.ts
+export const load: PageServerLoad = async ({ params }) => {
+  const product = await db.product.findUnique({
+    where: { id: params.id },
+  })
+
+  if (!product) {
+    error(404, { message: 'Product not found' })
+  }
+
+  return { product }
+}
+```
+
+```typescript
+// ✅ Parallel data fetching in load functions
+export const load: PageServerLoad = async ({ fetch, locals }) => {
+  const [user, products] = await Promise.all([
+    fetch('/api/me').then(r => r.json()),
+    db.product.findMany(),
+  ])
+
+  return { user, products }
+}
+```
+
+## Form Actions
+
+Use form actions for mutations. They work with and without JavaScript (progressive enhancement).
+
+```typescript
+// ✅ src/routes/products/new/+page.server.ts
+import type { Actions, PageServerLoad } from './$types'
+import { fail, redirect } from '@sveltejs/kit'
+import { z } from 'zod'
+
+const schema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  price: z.coerce.number().positive('Price must be positive'),
+})
+
+export const actions: Actions = {
+  create: async ({ request, locals }) => {
+    const formData = await request.formData()
+    const parsed = schema.safeParse(Object.fromEntries(formData))
+
+    if (!parsed.success) {
+      return fail(400, {
+        errors: parsed.error.flatten().fieldErrors,
+        values: Object.fromEntries(formData),
+      })
+    }
+
+    await db.product.create({ data: parsed.data })
+    redirect(303, '/products')
+  },
+}
+```
+
+```svelte
+<!-- ✅ src/routes/products/new/+page.svelte — progressive enhancement with use:enhance -->
+<script lang="ts">
+  import { enhance } from '$app/forms'
+  import type { ActionData } from './$types'
+
+  let { form }: { form: ActionData } = $props()
+</script>
+
+<form method="POST" action="?/create" use:enhance>
+  <label>
+    Name
+    <input name="name" type="text" value={form?.values?.name ?? ''} required />
+    {#if form?.errors?.name}
+      <p class="error">{form.errors.name[0]}</p>
+    {/if}
+  </label>
+
+  <label>
+    Price
+    <input name="price" type="number" step="0.01" value={form?.values?.price ?? ''} required />
+    {#if form?.errors?.price}
+      <p class="error">{form.errors.price[0]}</p>
+    {/if}
+  </label>
+
+  <button type="submit">Create Product</button>
+</form>
+```
+
+## Page Components
+
+```svelte
+<!-- ✅ src/routes/products/+page.svelte -->
+<script lang="ts">
+  import type { PageData } from './$types'
+
+  let { data }: { data: PageData } = $props()
+</script>
+
+<svelte:head>
+  <title>Products</title>
+</svelte:head>
+
+<main>
+  <h1>Products</h1>
+  <ul>
+    {#each data.products as product (product.id)}
+      <li>
+        <a href="/products/{product.id}">{product.name}</a>
+        <span>${product.price.toFixed(2)}</span>
+      </li>
+    {/each}
+  </ul>
+</main>
+```
+
+## Svelte Stores
+
+```typescript
+// ✅ src/lib/stores/cart.ts
+import { writable, derived } from 'svelte/store'
+
+interface CartItem {
+  id: string
+  name: string
+  price: number
+  quantity: number
+}
+
+function createCart() {
+  const { subscribe, update, set } = writable<CartItem[]>([])
+
+  return {
+    subscribe,
+    add(item: Omit<CartItem, 'quantity'>) {
+      update(items => {
+        const existing = items.find(i => i.id === item.id)
+        if (existing) {
+          return items.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i)
+        }
+        return [...items, { ...item, quantity: 1 }]
+      })
+    },
+    remove(id: string) {
+      update(items => items.filter(i => i.id !== id))
+    },
+    clear: () => set([]),
+  }
+}
+
+export const cart = createCart()
+
+export const cartTotal = derived(cart, $cart =>
+  $cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+)
+
+export const cartCount = derived(cart, $cart =>
+  $cart.reduce((sum, item) => sum + item.quantity, 0)
+)
+```
+
+## Server-Only Modules
+
+Place anything that must never reach the client (DB clients, secret keys, admin logic) in `$lib/server/`.
+
+```typescript
+// ✅ src/lib/server/db.ts — only importable in +page.server.ts and +server.ts
+import { PrismaClient } from '@prisma/client'
+
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
+
+export const db = globalForPrisma.prisma ?? new PrismaClient()
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+```
+
+```typescript
+// ✅ src/lib/server/auth.ts
+import { redirect } from '@sveltejs/kit'
+import type { RequestEvent } from '@sveltejs/kit'
+
+export function requireAuth(event: RequestEvent) {
+  const user = event.locals.user
+  if (!user) redirect(303, `/login?next=${event.url.pathname}`)
+  return user
+}
+```
+
+## API Routes
+
+Use `+server.ts` for REST-style API endpoints.
+
+```typescript
+// ✅ src/routes/api/products/+server.ts
+import type { RequestHandler } from './$types'
+import { json } from '@sveltejs/kit'
+import { db } from '$lib/server/db'
+
+export const GET: RequestHandler = async ({ url }) => {
+  const page = Number(url.searchParams.get('page') ?? '1')
+
+  const products = await db.product.findMany({
+    skip: (page - 1) * 20,
+    take: 20,
+  })
+
+  return json({ products })
+}
+
+export const POST: RequestHandler = async ({ request }) => {
+  const body = await request.json()
+  const product = await db.product.create({ data: body })
+  return json(product, { status: 201 })
+}
+```
+
+## Hooks and Middleware
+
+```typescript
+// ✅ src/hooks.server.ts
+import type { Handle } from '@sveltejs/kit'
+import { db } from '$lib/server/db'
+import { verifyToken } from '$lib/server/auth'
+
+export const handle: Handle = async ({ event, resolve }) => {
+  const token = event.cookies.get('session')
+
+  if (token) {
+    const user = await verifyToken(token)
+    event.locals.user = user ?? null
+  } else {
+    event.locals.user = null
+  }
+
+  return resolve(event)
+}
+```
+
+## Component Patterns
+
+```svelte
+<!-- ✅ Reusable component with typed props (Svelte 5 runes) -->
+<!-- src/lib/components/ProductCard.svelte -->
+<script lang="ts">
+  interface Props {
+    id: string
+    name: string
+    price: number
+    imageUrl?: string
+    onAddToCart?: (id: string) => void
+  }
+
+  let { id, name, price, imageUrl, onAddToCart }: Props = $props()
+</script>
+
+<article class="product-card">
+  {#if imageUrl}
+    <img src={imageUrl} alt={name} loading="lazy" />
+  {/if}
+  <h3>{name}</h3>
+  <p>${price.toFixed(2)}</p>
+  {#if onAddToCart}
+    <button onclick={() => onAddToCart(id)}>Add to Cart</button>
+  {/if}
+</article>
+```
+
+## Key Rules
+
+- `+page.server.ts` data never reaches the client bundle — safe for secrets and DB queries
+- `$lib/server/*` files throw a build error if imported in client-side code — use this boundary
+- Always use `error()` from `@sveltejs/kit` (not `throw new Error`) to return HTTP error responses
+- Use `redirect()` with status `303` after successful form actions to prevent double-submit
+- Use `use:enhance` on forms for progressive enhancement without losing native fallback behavior
+- `$props()` is the Svelte 5 way to declare component props — prefer it over `export let`
+- Avoid putting sensitive logic in `+page.ts` (runs on the client); use `+page.server.ts` instead
+- Use `svelte:head` for page-specific `<title>` and meta tags
+- Path aliases: `$lib` → `src/lib`, `$app/*` → SvelteKit runtime modules
