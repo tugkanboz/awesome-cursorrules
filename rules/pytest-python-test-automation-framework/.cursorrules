@@ -1,0 +1,103 @@
+# Project: Pytest Python Test Automation Framework
+
+## Framework Structure
+- Use pytest as the primary test runner for Python projects
+- Organize tests in a dedicated tests/ directory or alongside source files
+- Use conftest.py for shared fixtures, hooks, and plugins at each directory level
+- Follow a clear directory structure: tests/unit/, tests/integration/, tests/e2e/
+- Maintain configuration in pyproject.toml under [tool.pytest.ini_options]
+
+## Coding Standards
+- Follow PEP 8 style guidelines and use Black for code formatting
+- Use type hints for all function signatures including test functions and fixtures
+- Write descriptive test names using the pattern test_<what>_when_<condition>_expect_<result>
+- Keep tests concise, focused, and independently executable
+
+## Test Organization
+- Group related tests in classes prefixed with Test (no __init__ required)
+- Use modules for logical grouping: test_models.py, test_api.py, test_services.py
+- Separate unit, integration, and end-to-end tests in distinct directories
+- Implement conftest.py at each directory level for scoped fixtures
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern in every test
+- Write single-responsibility tests — one logical assertion per test
+- Avoid test interdependencies; each test must be runnable in isolation
+- Use meaningful assertion messages to make failures self-explanatory
+- Parametrize tests with @pytest.mark.parametrize instead of writing loops
+
+## Fixtures
+- Use pytest fixtures for all test setup, teardown, and shared state
+- Define fixture scope appropriately: function (default), class, module, session
+- Prefer function-scoped fixtures to maximize test isolation
+- Use yield in fixtures to handle teardown cleanly after the test
+- Apply autouse=True sparingly; prefer explicit fixture injection
+
+## Markers and Filtering
+- Register custom markers in pyproject.toml to prevent PytestUnknownMarkWarning
+- Use @pytest.mark.slow, @pytest.mark.integration, @pytest.mark.smoke consistently
+- Skip tests conditionally with @pytest.mark.skipif and document the reason
+- Use @pytest.mark.xfail for known failures; set strict=True when fixing is planned
+- Run targeted subsets with pytest -m "smoke and not slow"
+
+## Mocking Strategies
+- Use pytest-mock (mocker fixture) for all patching needs
+- Prefer mocker.patch over unittest.mock.patch for automatic teardown
+- Use mocker.spy() to assert call counts without replacing real behavior
+- Mock at the point of use, not at the point of definition
+- Validate mock calls with assert_called_once_with() for precise verification
+- Use MagicMock for attribute access and AsyncMock for async callables
+
+## Parametrize Patterns
+- Use @pytest.mark.parametrize for data-driven testing
+- Provide descriptive IDs via the ids parameter for readable test output
+- Extract large parameter datasets into module-level constants for readability
+- Combine multiple @pytest.mark.parametrize decorators for cartesian product test cases
+
+## Async Testing
+- Use pytest-asyncio for testing async/await code
+- Set asyncio_mode = "auto" in configuration for automatic async test detection
+- Use async fixtures with the same scope rules as synchronous fixtures
+- Replace coroutine mocks with AsyncMock from unittest.mock
+
+## Coverage
+- Configure coverage with pytest-cov: pytest --cov=src --cov-report=html
+- Set minimum coverage thresholds in pyproject.toml under [tool.coverage.report]
+- Enable branch coverage with --cov-branch for more meaningful metrics
+- Use # pragma: no cover sparingly and only for genuinely untestable branches
+
+## Plugin Ecosystem
+- pytest-cov: code coverage reporting
+- pytest-mock: Mockito-style mocking via the mocker fixture
+- pytest-asyncio: async/await test support
+- pytest-xdist: parallel test execution with -n auto
+- pytest-benchmark: performance regression testing for critical paths
+- factory-boy: test data factories for complex domain objects
+- Faker: realistic random test data generation
+
+## Performance and Parallelism
+- Use pytest-xdist with -n auto for parallel test execution on multi-core machines
+- Ensure all tests are stateless and thread-safe before enabling parallelism
+- Use session-scoped fixtures for expensive setup shared across all workers
+- Profile slow tests with --durations=10 to identify bottlenecks
+
+## CI/CD Integration
+- Generate JUnit XML reports with --junitxml=reports/junit.xml for CI parsing
+- Use --tb=short for compact tracebacks in CI logs
+- Cache .pytest_cache and __pycache__ across CI runs for speed
+- Fail fast with -x on critical pipelines to surface the first failure quickly
+- Upload HTML coverage reports to Codecov or SonarQube for trend tracking
+
+## Configuration (pyproject.toml)
+- Define testpaths, python_files, python_classes, python_functions explicitly
+- Set addopts for default CLI flags: -v --tb=short --strict-markers
+- Register all custom markers under markers to avoid unrecognized marker warnings
+- Configure log_cli = true and log_level = "INFO" for diagnostic output on failure
+
+## Error Handling and Debugging
+- Use pytest.raises(ExceptionType, match=r"pattern") for precise exception testing
+- Enable verbose output with -v and captured output with -s when debugging locally
+- Use pdb integration with --pdb or insert breakpoint() for interactive debugging
+- Leverage the caplog fixture to assert on log messages emitted during tests
+
+Remember to leverage pytest's powerful fixture system, rich plugin ecosystem, and built-in parametrize support to build a maintainable, fast, and reliable Python test suite.
