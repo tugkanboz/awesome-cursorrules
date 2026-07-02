@@ -1,0 +1,98 @@
+# Project: Jest JavaScript Unit Test Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript and TypeScript projects
+- Organize tests in __tests__ directories or alongside source files with .test.js/.spec.js extensions
+- Use TypeScript with @types/jest or Jest's built-in type support (jest-circus)
+- Configure jest.config.js (or jest.config.ts) at the project root
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices
+- Use meaningful describe and test/it block names that read as sentences
+- Implement clean code principles and single responsibility in tests
+- Limit describe block nesting to 3 levels maximum
+
+## Test Organization
+- Group related tests using describe blocks
+- Use it/test functions for individual test cases
+- Implement beforeEach/afterEach and beforeAll/afterAll for setup and teardown
+- Separate unit, integration, and snapshot tests into distinct directories
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern
+- Write focused, single-responsibility tests
+- Avoid shared mutable state between tests
+- Use jest.fn() for creating mock functions
+- Use jest.spyOn() for spying on existing methods without replacing them
+- Clear or restore mocks with jest.clearAllMocks() or jest.restoreAllMocks() in afterEach
+
+## Mocking Strategies
+- Use jest.mock() for automatic module mocking at the top of test files
+- Use manual mocks in __mocks__ directories for complex dependencies
+- Use jest.useFakeTimers() for testing time-dependent logic
+- Mock HTTP requests with msw (Mock Service Worker) or jest-mock-axios
+- Use jest.isolateModules() to reset module registry for tests requiring fresh imports
+
+## Assertions
+- Use expect() with descriptive matchers (toBe, toEqual, toStrictEqual, toContain)
+- Use .not for negative assertions
+- Use toMatchSnapshot() for stable output regression testing
+- Prefer toEqual over toBe for object and array comparisons
+- Use toThrow / toThrowError for error assertion
+
+## Coverage
+- Configure coverage collection via collectCoverage: true or --coverage flag
+- Use coverageProvider: 'v8' for performance or 'babel' for accuracy
+- Set meaningful thresholds in coverageThreshold (statements, branches, functions, lines)
+- Use collectCoverageFrom to target specific files and exclude generated code
+- Generate HTML and LCOV reports for visualization and CI integration
+
+## Performance
+- Use --runInBand for serial execution when debugging or avoiding port conflicts
+- Use --testPathPattern or --testNamePattern to run focused test subsets
+- Enable test caching (default) to skip unchanged test files
+- Configure maxWorkers to balance CPU usage and parallel execution speed
+
+## Snapshot Testing
+- Keep snapshots small and focused on stable UI output
+- Update snapshots intentionally with --updateSnapshot (-u) flag
+- Store snapshots in __snapshots__ directories co-located with test files
+- Review snapshot diffs carefully in code review to catch unintended changes
+
+## Test Data Management
+- Use factory functions or fixtures for reusable, consistent test data
+- Define TypeScript types/interfaces for all test data structures
+- Avoid hardcoded magic values; use named constants
+- Use @faker-js/faker for realistic, dynamic test data generation
+
+## CI/CD Integration
+- Use --ci flag in CI environments to fail on missing snapshots
+- Configure reporters: use 'default' locally, 'jest-junit' for CI pipelines
+- Cache node_modules and Jest's cache directory (.jest-cache) between CI runs
+- Upload coverage to Codecov, SonarQube, or similar services
+
+## Environment Configuration
+- Use testEnvironment: 'node' for backend tests and 'jsdom' for frontend/DOM tests
+- Set globals via setupFilesAfterFramework for global test utilities
+- Use .env.test files with dotenv for environment-specific configuration
+- Configure moduleNameMapper for path aliases and static asset mocks
+
+## Error Handling
+- Test both happy paths and error/edge cases
+- Assert on specific error messages and error types
+- Use expect(fn).toThrow(ErrorType) for synchronous errors
+- Use await expect(promise).rejects.toThrow() for async errors
+
+## Async Testing
+- Use async/await for all asynchronous test cases
+- Avoid mixing callbacks with promises in tests
+- Use jest.runAllTimers() or jest.advanceTimersByTime() with fake timers
+- Return promises from test functions when not using async/await
+
+## Documentation
+- Document non-obvious test setups with brief inline comments
+- Maintain a __tests__/README.md for complex fixture or helper documentation
+- Include examples of custom matchers in project documentation
+- Document project-specific mock strategies and shared setup files
+
+Remember to leverage Jest's watch mode (--watch or --watchAll) during development for rapid feedback, and always run the full suite before committing.
