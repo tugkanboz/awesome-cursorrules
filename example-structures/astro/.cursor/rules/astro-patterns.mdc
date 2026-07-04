@@ -1,0 +1,315 @@
+---
+description: Astro 4+ patterns — component syntax, islands architecture, content collections, SSR vs static rendering, and View Transitions
+globs: **/*.astro,**/src/content/**/*.md,**/src/content/**/*.mdx,**/src/content/**/*.yaml,**/src/pages/**/*.ts,astro.config.*
+alwaysApply: false
+---
+# Astro Excellence
+
+## Component Syntax
+
+Astro components use a two-section format: a fenced code block (Component Script) followed by a template (Component Template). Unlike JSX, the template is HTML-first.
+
+```astro
+---
+// Component Script — runs at build time (or server-side in SSR mode)
+// Import components, fetch data, define props here
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Card from '../components/Card.astro'
+
+interface Props {
+  title: string
+  description?: string
+}
+
+const { title, description = '' } = Astro.props
+
+const posts = await Astro.glob('../content/blog/*.md')
+---
+
+<!-- Component Template — plain HTML + Astro expressions -->
+<BaseLayout title={title}>
+  <h1>{title}</h1>
+  {description && <p class="lead">{description}</p>}
+
+  <ul>
+    {posts.map((post) => (
+      <li>
+        <Card title={post.frontmatter.title} href={post.url} />
+      </li>
+    ))}
+  </ul>
+</BaseLayout>
+```
+
+- The Component Script is **server-only** — no browser APIs unless inside a `<script>` tag
+- Expressions use single curly braces `{value}`, not JSX double-brace
+- Use `{condition && <Element />}` or ternary for conditional rendering; no `if` blocks in templates
+- `class` is the attribute name (not `className`); `class:list` accepts arrays and objects for conditional classes
+
+## Islands Architecture (Client Directives)
+
+By default every component renders to static HTML. Add a **client directive** to hydrate a component in the browser.
+
+```astro
+---
+import Counter from '../components/Counter.jsx'
+import HeavyChart from '../components/HeavyChart.vue'
+import SearchBox from '../components/SearchBox.svelte'
+---
+
+<!-- Hydrate immediately — use sparingly, only for above-the-fold critical UI -->
+<Counter client:load />
+
+<!-- Hydrate when the component enters the viewport (lazy) -->
+<HeavyChart client:visible />
+
+<!-- Hydrate after page load, during browser idle time -->
+<SearchBox client:idle />
+
+<!-- Hydrate only on a media query match -->
+<MobileMenu client:media="(max-width: 768px)" />
+
+<!-- Hydrate only when a parent component passes the 'client:only' hint (skips SSR entirely) -->
+<MapWidget client:only="react" />
+```
+
+- Omit the directive → zero JS shipped, pure HTML
+- `client:load` is the most expensive; default to `client:visible` or `client:idle`
+- `client:only` skips server rendering — use when the component relies on browser-only APIs (e.g., `window`, `localStorage`)
+
+## File-Based Routing
+
+```
+src/pages/
+├── index.astro           # Renders at /
+├── about.astro           # Renders at /about
+├── blog/
+│   ├── index.astro       # Renders at /blog
+│   └── [slug].astro      # Renders at /blog/:slug (static: getStaticPaths required)
+├── [...path].astro       # Catch-all: /anything/nested
+└── api/
+    └── search.ts         # API endpoint — export GET, POST, etc.
+```
+
+### Dynamic Routes with `getStaticPaths`
+
+```astro
+---
+// src/pages/blog/[slug].astro
+import { getCollection } from 'astro:content'
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog')
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post },
+  }))
+}
+
+const { post } = Astro.props
+const { Content } = await post.render()
+---
+
+<article>
+  <h1>{post.data.title}</h1>
+  <Content />
+</article>
+```
+
+- `getStaticPaths` must export from every `[dynamic]` page in static output mode
+- Return `{ params, props }` — `props` are available as `Astro.props` in the component
+- For SSR mode (`output: 'server'`), `getStaticPaths` is not used; read `Astro.params` directly
+
+## Content Collections
+
+Content Collections are the recommended way to manage structured content (blog posts, docs, authors).
+
+```typescript
+// src/content/config.ts
+import { defineCollection, z } from 'astro:content'
+
+const blog = defineCollection({
+  type: 'content',  // 'content' for .md/.mdx, 'data' for .yaml/.json
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    pubDate: z.coerce.date(),
+    tags: z.array(z.string()).default([]),
+    draft: z.boolean().default(false),
+    heroImage: z.string().optional(),
+  }),
+})
+
+const authors = defineCollection({
+  type: 'data',
+  schema: z.object({
+    name: z.string(),
+    bio: z.string(),
+    avatar: z.string(),
+  }),
+})
+
+export const collections = { blog, authors }
+```
+
+```astro
+---
+// Querying collections
+import { getCollection, getEntry } from 'astro:content'
+
+// Get all published posts, newest first
+const posts = (await getCollection('blog', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+
+// Get a single entry by collection + slug
+const author = await getEntry('authors', 'jane-doe')
+---
+```
+
+- Always define schemas in `src/content/config.ts` — Astro infers TypeScript types from the Zod schema
+- Use `type: 'content'` for Markdown/MDX, `type: 'data'` for JSON/YAML reference data
+- Filter collections at query time (`getCollection(name, filter)`) rather than filtering the array after
+
+## API Endpoints
+
+```typescript
+// src/pages/api/posts.ts
+import type { APIRoute } from 'astro'
+import { getCollection } from 'astro:content'
+
+export const GET: APIRoute = async ({ url }) => {
+  const tag = url.searchParams.get('tag')
+  const posts = await getCollection('blog', ({ data }) =>
+    !data.draft && (!tag || data.tags.includes(tag))
+  )
+
+  return new Response(
+    JSON.stringify(posts.map((p) => ({ slug: p.slug, ...p.data }))),
+    { headers: { 'Content-Type': 'application/json' } }
+  )
+}
+
+export const POST: APIRoute = async ({ request }) => {
+  const body = await request.json()
+  // handle mutation...
+  return new Response(JSON.stringify({ ok: true }), { status: 201 })
+}
+```
+
+- Export named functions (`GET`, `POST`, `PUT`, `DELETE`) for each HTTP method
+- Return a `Response` object — use `new Response(body, { status, headers })` or Astro's `redirect()`
+- API endpoints work in both static (`output: 'static'`, pre-rendered) and SSR mode
+
+## Layouts
+
+```astro
+---
+// src/layouts/BaseLayout.astro
+import '../styles/global.css'
+
+interface Props {
+  title: string
+  description?: string
+}
+
+const { title, description = 'My Astro site' } = Astro.props
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header>
+      <nav>...</nav>
+    </header>
+    <main>
+      <slot />              <!-- Default slot: page content goes here -->
+    </main>
+    <footer>
+      <slot name="footer" /> <!-- Named slot -->
+    </footer>
+  </body>
+</html>
+```
+
+```astro
+---
+// Using a named slot from a page
+import BaseLayout from '../layouts/BaseLayout.astro'
+---
+
+<BaseLayout title="Home">
+  <p>Main content goes into the default slot.</p>
+  <p slot="footer">This goes into the named footer slot.</p>
+</BaseLayout>
+```
+
+## View Transitions
+
+```astro
+---
+// src/layouts/BaseLayout.astro
+import { ViewTransitions } from 'astro:transitions'
+---
+
+<head>
+  <ViewTransitions />
+</head>
+```
+
+```astro
+<!-- Opt individual elements out of the default morph animation -->
+<aside transition:name="sidebar" transition:animate="slide">...</aside>
+
+<!-- Persist an element across navigations (e.g. an audio player) -->
+<audio transition:persist src="/music.mp3" />
+```
+
+- Add `<ViewTransitions />` once in your base layout to enable SPA-like navigation
+- `transition:name` links the "same" element across pages for a smooth morph animation — names must be unique per page
+- `transition:persist` keeps the element mounted without re-rendering during navigation
+
+## astro.config.mjs
+
+```javascript
+// astro.config.mjs
+import { defineConfig } from 'astro/config'
+import react from '@astrojs/react'
+import tailwind from '@astrojs/tailwind'
+import mdx from '@astrojs/mdx'
+import sitemap from '@astrojs/sitemap'
+
+export default defineConfig({
+  site: 'https://example.com',
+  output: 'static',           // 'static' | 'server' | 'hybrid'
+  integrations: [
+    react(),
+    tailwind(),
+    mdx(),
+    sitemap(),
+  ],
+  markdown: {
+    shikiConfig: {
+      theme: 'github-dark',
+    },
+  },
+})
+```
+
+- `output: 'static'` (default) — fully pre-rendered at build time
+- `output: 'server'` — fully server-rendered (requires an adapter: `@astrojs/node`, `@astrojs/cloudflare`, etc.)
+- `output: 'hybrid'` — static by default, opt specific pages into SSR with `export const prerender = false`
+
+## Key Rules
+
+- Component Script runs **once at build/request time** — never use `document`, `window`, or event listeners there; put those in `<script>` tags or client-framework components
+- Pass data from the server to a `<script>` tag via `define:vars={{ myVar }}` directive
+- Prefer `Astro.glob()` for local file imports; use `getCollection()` for typed content collections
+- In SSR mode, `Astro.cookies`, `Astro.request`, and `Astro.redirect()` are available for server-side logic
+- MDX files can import and use Astro/React/Vue/Svelte components — use `.mdx` extension and the `@astrojs/mdx` integration
+- `class:list={[...]}` is the Astro equivalent of `clsx`/`classnames` for conditional CSS classes

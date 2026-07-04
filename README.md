@@ -36,6 +36,7 @@ awesome-cursorrules/
 │   ├── cypress/                    # .cursor/rules/{core,patterns}/*.mdc
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
 ├── 🎯 example-structures/          # Flat, focused .mdc structure examples
+│   ├── astro/                      # islands architecture, content collections, routing
 │   ├── cypress/                    # testing-fundamentals, api-testing
 │   ├── next-js/                    # app-router-patterns
 │   ├── react-typescript/           # component-development
@@ -456,6 +457,7 @@ Infrastructure that grows from individual projects to enterprise-scale monorepos
 - **[🌐 Cypress Testing](./example-structures/cypress/.cursor/rules/)** - E2E testing excellence
 - **[⚛️ React TypeScript](./example-structures/react-typescript/.cursor/rules/)** - Modern component development
 - **[▲ Next.js App Router](./example-structures/next-js/.cursor/rules/)** - Server Components, Route Handlers, Server Actions, and metadata API
+- **[🚀 Astro](./example-structures/astro/.cursor/rules/)** - Islands architecture, content collections, dynamic routes, and View Transitions
 
 ### 🎓 **Learning Resources**
 - **[📖 Official Documentation](https://cursor.com/docs/context/rules)** - Cursor Rules comprehensive guide
