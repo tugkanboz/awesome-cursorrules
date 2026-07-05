@@ -1,0 +1,239 @@
+---
+description: FastAPI patterns — Pydantic v2 models, async endpoints, dependency injection, error handling, and SQLAlchemy async integration
+globs: **/routers/**/*.py,**/api/**/*.py,**/main.py,**/dependencies.py,**/schemas.py,**/models.py
+alwaysApply: false
+---
+# FastAPI Excellence
+
+## Project Structure
+```
+app/
+├── main.py               # FastAPI app factory, lifespan, router registration
+├── dependencies.py       # Shared dependencies (DB session, current user)
+├── routers/
+│   ├── users.py
+│   └── items.py
+├── schemas/              # Pydantic request/response models
+│   ├── user.py
+│   └── item.py
+├── models/               # SQLAlchemy ORM models
+│   └── user.py
+└── core/
+    ├── config.py         # Settings via pydantic-settings
+    └── security.py       # JWT helpers
+```
+
+## App Factory & Lifespan
+```python
+# ✅ app/main.py — lifespan for startup/shutdown, no @app.on_event
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from app.routers import users, items
+from app.core.config import settings
+from app.db import engine, Base
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    lifespan=lifespan,
+)
+
+app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
+app.include_router(items.router, prefix="/api/v1/items", tags=["items"])
+```
+
+## Pydantic v2 Schemas
+```python
+# ✅ schemas/user.py — use model_config, not class Config
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from datetime import datetime
+
+class UserBase(BaseModel):
+    email: EmailStr
+    username: str
+
+    @field_validator("username")
+    @classmethod
+    def username_alphanumeric(cls, v: str) -> str:
+        if not v.isalnum():
+            raise ValueError("username must be alphanumeric")
+        return v.lower()
+
+class UserCreate(UserBase):
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("password must be at least 8 characters")
+        return v
+
+class UserResponse(UserBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}  # replaces orm_mode = True
+```
+
+## Async SQLAlchemy
+```python
+# ✅ db.py — async engine with connection pooling
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
+from app.core.config import settings
+
+engine = create_async_engine(settings.DATABASE_URL, pool_size=10, max_overflow=20)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+class Base(DeclarativeBase):
+    pass
+
+# ✅ dependencies.py — async DB session as a dependency
+from typing import AsyncGenerator
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+```
+
+## Router & Endpoint Patterns
+```python
+# ✅ routers/users.py
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.dependencies import get_db, get_current_user
+from app.schemas.user import UserCreate, UserResponse
+from app.models.user import User
+
+router = APIRouter()
+
+@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> User:
+    result = await db.execute(select(User).where(User.email == payload.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+    user = User(email=payload.email, username=payload.username)
+    user.set_password(payload.password)
+    db.add(user)
+    await db.flush()
+    await db.refresh(user)
+    return user
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> User:
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+```
+
+## Dependency Injection
+```python
+# ✅ dependencies.py — composable dependency chain
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.security import decode_access_token
+from app.models.user import User
+
+bearer_scheme = HTTPBearer()
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    token_data = decode_access_token(credentials.credentials)
+    if token_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = await db.get(User, token_data.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
+    return user
+
+async def get_current_superuser(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+    return current_user
+```
+
+## Global Error Handling
+```python
+# ✅ main.py — structured error responses
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Validation error",
+            "errors": [
+                {"field": ".".join(str(l) for l in e["loc"][1:]), "message": e["msg"]}
+                for e in exc.errors()
+            ],
+        },
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None),
+    )
+```
+
+## Configuration with pydantic-settings
+```python
+# ✅ core/config.py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "My API"
+    VERSION: str = "1.0.0"
+    DATABASE_URL: str
+    SECRET_KEY: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+settings = Settings()
+```
+
+## Key Rules
+- Use `async def` for all endpoints that touch I/O (DB, HTTP, files)
+- Declare `response_model` on every endpoint; return ORM objects directly when `from_attributes=True`
+- Use `status.HTTP_*` constants instead of raw integers
+- Never use `@app.on_event` (deprecated) — use `lifespan` context manager
+- Validate and parse env vars with `pydantic-settings`, not `os.getenv`
+- Use `await session.flush()` + `await session.refresh()` to get DB-generated IDs before commit
+- Raise `HTTPException` with explicit `status_code` and `detail`; never return error dicts manually

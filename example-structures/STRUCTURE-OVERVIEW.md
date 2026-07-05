@@ -54,6 +54,21 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### ⚡ FastAPI
+```
+fastapi/
+├── .cursor/rules/
+│   └── api-patterns.mdc              # Endpoints, Pydantic v2, async DB, auth
+└── app/
+```
+
+**Key Features:**
+- **App Factory & Lifespan**: Modern startup/shutdown without deprecated `@app.on_event`
+- **Pydantic v2 Schemas**: `model_config`, `field_validator`, `from_attributes`
+- **Async SQLAlchemy**: Connection pooling, async session dependency
+- **Dependency Injection**: Composable auth chain (`get_db` → `get_current_user` → `get_current_superuser`)
+- **Global Error Handling**: Structured JSON error responses for validation and HTTP errors
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions

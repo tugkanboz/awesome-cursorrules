@@ -37,6 +37,7 @@ awesome-cursorrules/
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
 ├── 🎯 example-structures/          # Flat, focused .mdc structure examples
 │   ├── cypress/                    # testing-fundamentals, api-testing
+│   ├── fastapi/                    # api-patterns (Pydantic v2, async SQLAlchemy, auth)
 │   ├── next-js/                    # app-router-patterns
 │   ├── react-typescript/           # component-development
 │   └── selenium-python/            # architecture, page-objects, test-patterns
@@ -354,6 +355,7 @@ cp -r example-structures/react-typescript/.cursor/rules/* frontend/.cursor/rules
 ```bash
 # Full-stack development setup
 cp -r example-structures/react-typescript/.cursor/rules/* frontend/.cursor/rules/
+cp -r example-structures/fastapi/.cursor/rules/* backend/.cursor/rules/
 cp -r example-structures/selenium-python/.cursor/rules/* backend-tests/.cursor/rules/
 cp -r example-structures/cypress/.cursor/rules/* e2e-tests/.cursor/rules/
 ```
