@@ -1,0 +1,92 @@
+# Project: Jest Unit Testing Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript/TypeScript projects
+- Organize tests in __tests__ directories or alongside source files with .test.js/.spec.js extensions
+- Use TypeScript with ts-jest or Babel for transpilation
+- Leverage Jest's built-in jsdom environment for DOM testing
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices
+- Use meaningful test and variable naming
+- Implement clean code principles
+- Limit describe block nesting to 3 levels maximum
+
+## Test Organization
+- Group related tests using describe blocks
+- Use it/test functions for individual test cases
+- Implement beforeEach/afterEach and beforeAll/afterAll for setup and teardown
+- Separate unit, integration, and component tests into distinct directories
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern
+- Write focused, single-responsibility tests
+- Avoid test interdependencies and shared mutable state
+- Use jest.fn() for mocking functions instead of manual mocks
+- Clear mocks between tests with jest.clearAllMocks() in beforeEach
+
+## Mocking Strategies
+- Use jest.mock() for module-level mocking at the top of test files
+- Implement jest.spyOn() for method-level spying without replacing implementation
+- Use jest.useFakeTimers() for time-dependent tests; restore with jest.useRealTimers()
+- Mock HTTP requests with msw (Mock Service Worker) or jest.mock() for fetch/axios
+- Use jest.isolateModules() when you need fresh module instances per test
+- Prefer jest.resetAllMocks() over jest.clearAllMocks() when mock state must not leak
+
+## Assertions
+- Use expect() with specific, descriptive matchers
+- Implement custom matchers via expect.extend() for domain-specific assertions
+- Use toMatchSnapshot() for stable serializable output; review snapshot diffs carefully
+- Prefer toEqual for deep equality over toBe for object comparisons
+- Use toThrow / toThrowError for error assertions; wrap the call in an arrow function
+
+## Coverage
+- Configure coverage with the built-in istanbul (v8 or babel) provider
+- Set meaningful coverage thresholds in jest.config.js (statements, branches, functions, lines)
+- Use coveragePathIgnorePatterns for generated or non-testable code
+- Generate lcov and html reports for local visualization and CI upload
+
+## Performance
+- Use --runInBand only when tests have hard sequencing requirements; prefer parallel runs
+- Limit the use of beforeAll/afterAll for expensive shared setup to genuinely shared state
+- Use jest.mock() at module level to avoid repeated mock setup overhead
+- Configure maxWorkers to balance CPU usage in CI pipelines
+
+## Component Testing
+- Use @testing-library/react (or /vue, /svelte) for user-centric DOM assertions
+- Query elements by accessible roles, labels, and text rather than implementation details
+- Use userEvent over fireEvent for realistic user interaction simulation
+- Mock child components only when testing in complete isolation is critical
+
+## Test Data Management
+- Use factory functions or fixtures for reusable test data
+- Define TypeScript interfaces for all test data structures
+- Avoid hardcoded magic values; use named constants
+- Generate dynamic data with @faker-js/faker when variability is needed
+
+## CI/CD Integration
+- Configure reporters for CI: --reporters=default,jest-junit for pipeline compatibility
+- Use --ci flag in CI environments to fail on missing snapshots instead of writing them
+- Cache the Jest transform cache directory to speed up runs
+- Upload coverage reports to Codecov or SonarQube after successful test runs
+
+## Environment Configuration
+- Use jest.config.js (or jest.config.ts) as the single source of truth for configuration
+- Set testEnvironment to 'node' for backend code and 'jsdom' for browser/DOM code
+- Configure moduleNameMapper for path aliases and static asset mocks
+- Use setupFilesAfterFramework (setupFilesAfterEnv) for global matchers and test utilities
+- Handle environment variables with dotenv via globalSetup or setupFiles
+
+## Error Handling
+- Test both success and failure code paths explicitly
+- Assert on specific error messages and types with toThrow
+- Use expect().rejects.toThrow() for async error assertions
+- Implement retry or polling helpers for inherently flaky asynchronous operations
+
+## Documentation
+- Document complex test scenarios with brief inline comments explaining the why
+- Maintain a test helper and fixture README for the test directory
+- Include examples for custom matchers added via expect.extend()
+- Document project-specific mock strategies and shared fixture conventions
+
+Remember to leverage Jest's extensive ecosystem and stable snapshot infrastructure for reliable, maintainable unit testing.
