@@ -1,0 +1,259 @@
+---
+description: Prisma ORM patterns — schema design, type-safe queries, relation handling, migrations, and error management
+globs: **/prisma/schema.prisma,**/prisma/**/*.ts,**/*.prisma,**/lib/db.ts,**/lib/prisma.ts,**/repositories/**/*.ts
+alwaysApply: false
+---
+# Prisma ORM Patterns
+
+## Prisma Client Setup
+
+```typescript
+// lib/prisma.ts — singleton to avoid exhausting the connection pool
+import { PrismaClient } from "@prisma/client"
+
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["query", "error"] : ["error"],
+  })
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma
+}
+```
+
+## Schema Design
+
+```prisma
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ✅ Use @@map / @map to keep DB names snake_case while keeping model/field names camelCase
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  fullName  String   @map("full_name")
+  role      Role     @default(USER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  posts     Post[]
+  profile   Profile?
+
+  @@map("users")
+}
+
+model Post {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  content     String?
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  authorId    String    @map("author_id")
+
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tags     Tag[]    @relation("PostTags")
+
+  @@index([authorId])
+  @@index([published, publishedAt(sort: Desc)])
+  @@map("posts")
+}
+
+model Tag {
+  id    String @id @default(cuid())
+  name  String @unique
+  posts Post[] @relation("PostTags")
+
+  @@map("tags")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+```
+
+## Type-Safe Queries
+
+```typescript
+import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
+
+// ✅ Use Prisma.UserGetPayload for precise return type inference
+type PostWithAuthor = Prisma.PostGetPayload<{
+  include: { author: { select: { id: true; fullName: true; email: true } } }
+}>
+
+// ✅ select over include when you don't need all fields (avoids over-fetching)
+async function getPublishedPosts(page: number, limit: number): Promise<PostWithAuthor[]> {
+  return prisma.post.findMany({
+    where: { published: true },
+    orderBy: { publishedAt: "desc" },
+    skip: (page - 1) * limit,
+    take: limit,
+    include: {
+      author: { select: { id: true, fullName: true, email: true } },
+    },
+  })
+}
+
+// ✅ findUniqueOrThrow / findFirstOrThrow — let Prisma raise NotFoundError
+async function getPostBySlug(slug: string): Promise<PostWithAuthor> {
+  return prisma.post.findUniqueOrThrow({
+    where: { slug },
+    include: {
+      author: { select: { id: true, fullName: true, email: true } },
+    },
+  })
+}
+
+// ✅ Upsert for create-or-update semantics
+async function upsertTag(name: string) {
+  return prisma.tag.upsert({
+    where: { name },
+    update: {},           // already exists, nothing to update
+    create: { name },
+  })
+}
+
+// ✅ Batch operations with createMany / updateMany
+async function publishPosts(postIds: string[]) {
+  return prisma.post.updateMany({
+    where: { id: { in: postIds } },
+    data: { published: true, publishedAt: new Date() },
+  })
+}
+```
+
+## Relation Handling
+
+```typescript
+// ✅ Nested writes — create parent and child in one transaction
+async function createPostWithTags(
+  authorId: string,
+  title: string,
+  tagNames: string[]
+) {
+  const slug = title.toLowerCase().replace(/\s+/g, "-")
+
+  return prisma.post.create({
+    data: {
+      title,
+      slug,
+      authorId,
+      tags: {
+        connectOrCreate: tagNames.map((name) => ({
+          where: { name },
+          create: { name },
+        })),
+      },
+    },
+    include: { tags: true },
+  })
+}
+
+// ✅ Explicit transactions for multi-step operations
+async function transferPostOwnership(postId: string, newAuthorId: string) {
+  return prisma.$transaction(async (tx) => {
+    const post = await tx.post.findUniqueOrThrow({ where: { id: postId } })
+
+    // Verify new author exists
+    await tx.user.findUniqueOrThrow({ where: { id: newAuthorId } })
+
+    return tx.post.update({
+      where: { id: postId },
+      data: { authorId: newAuthorId },
+    })
+  })
+}
+```
+
+## Error Handling
+
+```typescript
+import { Prisma } from "@prisma/client"
+
+// ✅ Handle Prisma-specific errors by code
+async function createUser(email: string, fullName: string) {
+  try {
+    return await prisma.user.create({ data: { email, fullName } })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        // Unique constraint violation — field is in error.meta.target
+        throw new Error(`A user with this email already exists`)
+      }
+      if (error.code === "P2025") {
+        // Record not found (e.g. in a nested relation)
+        throw new Error(`Related record not found`)
+      }
+    }
+    throw error  // re-throw unknown errors
+  }
+}
+
+// Common Prisma error codes:
+// P2002 — Unique constraint violation
+// P2025 — Record not found (findUniqueOrThrow, update, delete)
+// P2003 — Foreign key constraint violation
+// P2014 — Required relation violation
+```
+
+## Testing with Prisma
+
+```typescript
+// tests/helpers/db.ts — isolated test database with transaction rollback
+import { PrismaClient } from "@prisma/client"
+import { mockDeep, DeepMockProxy } from "jest-mock-extended"
+import { prisma } from "@/lib/prisma"
+
+// Option A: Mock Prisma entirely for pure unit tests
+jest.mock("@/lib/prisma", () => ({
+  __esModule: true,
+  prisma: mockDeep<PrismaClient>(),
+}))
+
+export const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>
+
+// Option B: Real DB with per-test transaction rollback (integration tests)
+// Use a separate TEST_DATABASE_URL that points to a test DB
+// Wrap each test in prisma.$transaction and never commit
+
+// Usage in unit tests:
+describe("createUser", () => {
+  it("throws on duplicate email", async () => {
+    prismaMock.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint", {
+        code: "P2002",
+        clientVersion: "5.0.0",
+        meta: { target: ["email"] },
+      })
+    )
+
+    await expect(createUser("dup@example.com", "Test")).rejects.toThrow(
+      "A user with this email already exists"
+    )
+  })
+})
+```
+
+## Key Rules
+
+- Never instantiate `new PrismaClient()` in route handlers — always import the singleton from `lib/prisma.ts`
+- Prefer `select` over `include` when fetching lists — only use `include` when nested relations are required by the caller
+- Use `findUniqueOrThrow` / `findFirstOrThrow` instead of manually throwing on `null` — Prisma raises a typed `NotFoundError`
+- Always add `@@index` on foreign key fields and any columns used in `WHERE` clauses for pagination
+- Run `prisma migrate dev` in development, `prisma migrate deploy` in CI/production — never run `db push` against production
+- Use `Prisma.ModelGetPayload<{ include/select: ... }>` to type the return of custom include shapes instead of writing manual types
