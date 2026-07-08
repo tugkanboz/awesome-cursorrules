@@ -1,0 +1,90 @@
+# Project: Jest JavaScript Unit Test Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript/TypeScript projects
+- Organize tests in __tests__ directories or co-locate with source files using .test.js/.spec.js suffix
+- Use TypeScript with ts-jest or Babel for transpilation
+- Configure jest.config.js (or jest.config.ts) as the single source of truth for test settings
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices
+- Use meaningful, descriptive test and variable names
+- Implement clean code principles
+- Limit describe block nesting to 3 levels maximum
+- Keep each test file focused on a single module or component
+
+## Test Organization
+- Group related tests using describe blocks
+- Use it/test functions for individual test cases
+- Implement beforeEach/afterEach for per-test setup and teardown
+- Use beforeAll/afterAll only for expensive shared resources that are truly read-only
+- Separate unit, integration, and snapshot tests into distinct directories
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern consistently
+- Write focused, single-responsibility tests
+- Avoid test interdependencies and shared mutable state between tests
+- Use jest.fn() for mocking instead of manual stubs
+- Clear or reset mocks in afterEach to prevent cross-test pollution
+- Prefer explicit assertions over implicit pass-by-not-throwing
+
+## Mocking Strategies
+- Use jest.mock() for module-level mocking with automatic hoisting
+- Implement jest.spyOn() for method-level spying without replacing the full module
+- Use jest.useFakeTimers() with modern mode for timer-dependent tests
+- Mock HTTP requests with msw (Mock Service Worker) for realistic network simulation
+- Restore all mocks after each test with jest.restoreAllMocks() or clearMocks: true in config
+- Prefer __mocks__ directories for frequently mocked modules
+
+## Assertions
+- Use expect() with specific, descriptive matchers from @jest/expect
+- Implement custom matchers via expect.extend() for domain-specific assertions
+- Use toMatchSnapshot() and toMatchInlineSnapshot() only for stable, deterministic output
+- Prefer toEqual for deep equality over toBe for object/array comparisons
+- Use toThrow and toThrowError with specific error messages or types
+
+## Coverage
+- Configure coverage collection with the coverageProvider option (v8 recommended for accuracy)
+- Set meaningful thresholds in coverageThreshold for statements, branches, functions, and lines
+- Use coveragePathIgnorePatterns to exclude generated files, mocks, and test utilities
+- Generate lcov and html reports: lcov for CI integration, html for local visualization
+- Run coverage in CI but not in watch mode to keep local feedback fast
+
+## Performance
+- Enable --runInBand only for debugging; prefer parallel workers in CI
+- Use testPathPattern or testNamePattern to run targeted subsets during development
+- Minimize expensive beforeAll operations; prefer lightweight beforeEach
+- Configure maxWorkers in jest.config to balance CPU usage in CI environments
+- Use --bail to stop early on first failure in pre-commit hooks
+
+## Snapshot Testing
+- Keep snapshot files small and focused; avoid snapshotting entire page trees
+- Update snapshots intentionally with --updateSnapshot, review diffs in code review
+- Use toMatchInlineSnapshot() for small, self-documenting snapshots in the test file
+- Delete obsolete snapshots with --ci flag to prevent stale files from accumulating
+
+## Test Data Management
+- Use factory functions or builders for reusable, composable test data
+- Keep fixtures in a dedicated __fixtures__ directory
+- Avoid hardcoding IDs, dates, and environment-specific values; use constants or generators
+- Use faker or similar libraries for randomized but realistic data generation
+
+## Error Handling
+- Test both the happy path and error/edge cases for every public function
+- Assert on error messages and error types, not just that an error was thrown
+- Test async rejection paths with rejects.toThrow() or try/catch inside tests
+- Use expect.assertions(n) in async tests to catch silent resolution instead of rejection
+
+## CI/CD Integration
+- Run jest with --ci flag in pipelines to disable interactive prompts and fail on missing snapshots
+- Output results in JUnit XML format (jest-junit reporter) for CI test result parsing
+- Cache node_modules and Jest's transform cache between pipeline runs for speed
+- Run linting and type-checking in parallel with the test suite, not sequentially
+- Use --forceExit if test environment teardown hangs in CI
+
+## Documentation
+- Use JSDoc comments on test helpers and custom matchers to clarify intent
+- Document non-obvious test setup steps in a comment at the top of the test file
+- Maintain a README.md in the tests root explaining directory structure and conventions
+
+Remember to keep tests fast, deterministic, and independent — a test suite that is slow or flaky will be ignored, undermining the entire testing strategy.
