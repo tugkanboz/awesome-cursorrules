@@ -54,6 +54,21 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### 🚂 Express.js + Node.js
+```
+express-nodejs/
+├── .cursor/rules/
+│   └── api-patterns.mdc              # REST API patterns, middleware, auth, testing
+└── src/
+```
+
+**Key Features:**
+- **App Factory Pattern**: Separate `createApp()` from server entry point for testability
+- **Layered Architecture**: Controllers → Services → DB; controllers stay thin
+- **Middleware Stack**: helmet, cors, rate-limit, Zod validation, JWT auth
+- **Error Handling**: 4-parameter error middleware, custom `AppError` class
+- **Testing with Supertest**: Integration tests without binding a port
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions
@@ -127,7 +142,7 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ## 🎉 Getting Started
 
 ### Quick Setup
-1. **Choose Framework**: Select from Selenium Python, Cypress, or React TypeScript
+1. **Choose Framework**: Select from Selenium Python, Cypress, React TypeScript, or Express.js + Node.js
 2. **Copy Rules**: Copy `.mdc` files to your project's `.cursor/rules/` directory
 3. **Customize**: Adjust glob patterns and examples to match your project structure
 4. **Iterate**: Refine rules based on team feedback and project needs
