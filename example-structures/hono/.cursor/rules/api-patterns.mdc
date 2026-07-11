@@ -1,0 +1,250 @@
+---
+description: Hono web framework patterns — typed routing, middleware, Zod validation, RPC client, and edge/serverless deployment
+globs: **/src/**/*.ts,**/src/**/*.tsx,**/index.ts,**/app.ts,**/routes/**/*.ts,**/middleware/**/*.ts,hono.config.*
+alwaysApply: false
+---
+# Hono Development Excellence
+
+## What Hono Is
+Hono is a lightweight, edge-first web framework that runs on Cloudflare Workers, Deno Deploy, Bun, Node.js, and AWS Lambda with a single unified API. Key properties:
+- **Zero dependencies**, ships ~14kB
+- **Web Standards API** (`Request`/`Response`) — portable across runtimes
+- **End-to-end TypeScript** via `hono/client` RPC
+- **Fast routing** using trie + regex hybrid
+
+## Project Structure
+```
+src/
+├── index.ts            # Entry point — mounts app, exports for runtime adapter
+├── app.ts              # App factory (for testability)
+├── routes/
+│   ├── users.ts        # /users sub-application
+│   └── items.ts
+├── middleware/
+│   ├── auth.ts         # JWT verification
+│   └── logger.ts       # Custom logger
+└── lib/
+    ├── db.ts           # D1 / Turso / Prisma client factory
+    └── env.ts          # Typed environment via zod
+```
+
+## App Factory
+```typescript
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
+import { secureHeaders } from 'hono/secure-headers'
+import { usersRoutes } from './routes/users'
+import { itemsRoutes } from './routes/items'
+
+// ✅ Use a factory function so tests can create isolated app instances
+export function createApp() {
+  const app = new Hono()
+
+  app.use('*', logger())
+  app.use('*', secureHeaders())
+  app.use('/api/*', cors({ origin: ['https://example.com'] }))
+
+  app.route('/api/users', usersRoutes)
+  app.route('/api/items', itemsRoutes)
+
+  app.onError((err, c) => {
+    console.error(err)
+    return c.json({ error: 'Internal Server Error' }, 500)
+  })
+
+  app.notFound((c) => c.json({ error: 'Not Found' }, 404))
+
+  return app
+}
+
+const app = createApp()
+export default app            // Cloudflare Workers / Bun / Deno
+```
+
+## Typed Environment (Cloudflare Workers)
+```typescript
+// src/lib/env.ts
+import { z } from 'zod'
+
+// ✅ Validate bindings once at startup rather than casting everywhere
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  JWT_SECRET: z.string().min(32),
+  ENVIRONMENT: z.enum(['development', 'staging', 'production']).default('development'),
+})
+
+export type Env = z.infer<typeof envSchema>
+
+export function parseEnv(raw: Record<string, string>): Env {
+  return envSchema.parse(raw)
+}
+
+// In Cloudflare Workers, bindings live on c.env — pass them through context
+// type AppEnv = { Bindings: Env }
+// const app = new Hono<AppEnv>()
+```
+
+## Routing with Zod Validation
+```typescript
+import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
+
+const createUserSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+  role: z.enum(['admin', 'user']).default('user'),
+})
+
+const userIdSchema = z.object({
+  id: z.string().uuid(),
+})
+
+export const usersRoutes = new Hono()
+
+// ✅ zValidator infers types — no manual casting needed
+usersRoutes
+  .get('/', async (c) => {
+    const users = await getUsersFromDb()
+    return c.json({ users })
+  })
+  .post('/', zValidator('json', createUserSchema), async (c) => {
+    const data = c.req.valid('json')     // fully typed: { name, email, role }
+    const user = await createUser(data)
+    return c.json({ user }, 201)
+  })
+  .get('/:id', zValidator('param', userIdSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const user = await getUserById(id)
+    if (!user) return c.json({ error: 'User not found' }, 404)
+    return c.json({ user })
+  })
+  .delete('/:id', zValidator('param', userIdSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    await deleteUser(id)
+    return c.body(null, 204)
+  })
+```
+
+## Middleware
+```typescript
+import { createMiddleware } from 'hono/factory'
+import { HTTPException } from 'hono/http-exception'
+import { verify } from 'hono/jwt'
+
+// ✅ createMiddleware gives typed context
+export const authMiddleware = createMiddleware<{ Variables: { userId: string } }>(
+  async (c, next) => {
+    const authorization = c.req.header('Authorization')
+    if (!authorization?.startsWith('Bearer ')) {
+      throw new HTTPException(401, { message: 'Missing bearer token' })
+    }
+
+    const token = authorization.slice(7)
+    try {
+      const payload = await verify(token, c.env.JWT_SECRET)
+      c.set('userId', payload.sub as string)
+      await next()
+    } catch {
+      throw new HTTPException(401, { message: 'Invalid token' })
+    }
+  }
+)
+
+// ✅ Use HTTPException — Hono's onError handler picks it up automatically
+export const requireRole = (role: string) =>
+  createMiddleware<{ Variables: { userRole: string } }>(async (c, next) => {
+    const userRole = c.get('userRole')
+    if (userRole !== role) {
+      throw new HTTPException(403, { message: 'Forbidden' })
+    }
+    await next()
+  })
+```
+
+## RPC Client (End-to-End Type Safety)
+```typescript
+// server: export the app type
+export type AppType = typeof usersRoutes
+
+// client: use hono/client — no code generation needed
+import { hc } from 'hono/client'
+import type { AppType } from '../server/routes/users'
+
+const client = hc<AppType>('https://api.example.com')
+
+// Fully typed request and response
+const res = await client.api.users.$post({
+  json: { name: 'Alice', email: 'alice@example.com' },
+})
+const { user } = await res.json()
+// user.name is string, user.email is string — inferred from server schema
+```
+
+## Testing with Vitest
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest'
+import { createApp } from '../src/app'
+
+describe('Users API', () => {
+  let app: ReturnType<typeof createApp>
+
+  beforeEach(() => {
+    // ✅ Fresh app per test — avoids state leaking between tests
+    app = createApp()
+  })
+
+  it('POST /api/users — creates a user', async () => {
+    const res = await app.request('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Alice', email: 'alice@example.com' }),
+    })
+
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.user.email).toBe('alice@example.com')
+  })
+
+  it('POST /api/users — rejects invalid email', async () => {
+    const res = await app.request('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Bob', email: 'not-an-email' }),
+    })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('GET /api/users/:id — returns 404 for unknown ID', async () => {
+    const res = await app.request('/api/users/00000000-0000-0000-0000-000000000000')
+    expect(res.status).toBe(404)
+  })
+})
+```
+
+## Deployment Adapters
+```typescript
+// Cloudflare Workers (default — just export default app)
+export default app
+
+// Bun
+import { serve } from 'bun'
+serve({ fetch: app.fetch, port: 3000 })
+
+// Node.js
+import { serve } from '@hono/node-server'
+serve({ fetch: app.fetch, port: 3000 })
+
+// Deno Deploy
+Deno.serve(app.fetch)
+```
+
+## Key Principles
+- **`c.json()`** for JSON responses — sets `Content-Type: application/json` automatically
+- **`zValidator`** from `@hono/zod-validator` — validate at the route level; `c.req.valid()` then gives typed data
+- **`HTTPException`** for expected errors; let `onError` catch unexpected ones
+- **`createMiddleware`** — attach typed variables to context via generics instead of casting `c.get()`
+- **`app.request()`** in tests — uses Web Standard `Request`/`Response`, no HTTP server needed
+- Keep routes thin: business logic lives in service functions, not route handlers
