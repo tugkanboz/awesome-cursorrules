@@ -1,0 +1,111 @@
+# Project: WebdriverIO Test Automation Framework
+
+## Framework Structure
+- Use WebdriverIO (WDIO) as the primary test runner and automation framework
+- Implement Page Object Model pattern with dedicated page classes
+- Organise specs, page objects, and helpers in separate directories
+- Use TypeScript for type-safe test implementations
+- Configure wdio.conf.ts as the single source of truth for runner settings
+
+## Coding Standards
+- Follow TypeScript and ESLint best practices
+- Use Prettier for consistent code formatting
+- Maximum line length: 100 characters
+- Use async/await for all browser interactions; never mix callbacks with async patterns
+- Name page object files with `.page.ts` suffix (e.g. `login.page.ts`)
+
+## Test Organisation
+- Group related tests in `describe` blocks reflecting user journeys or features
+- Use `it`/`test` with descriptive names that read as requirements
+- Keep specs focused: one user story or scenario per spec file
+- Use Mocha hooks (`before`, `beforeEach`, `after`, `afterEach`) for setup and teardown
+- Separate smoke, regression, and integration suites in `wdio.conf.ts` via `suites`
+
+## Best Practices
+- Rely on WDIO's built-in auto-waiting; avoid manual `browser.pause()` calls
+- Use `$` / `$$` selectors with `data-testid` attributes for stable element references
+- Chain assertions with `expect()` from `@wdio/globals` for readable output
+- Keep page objects free of assertions; put assertions in spec files only
+- Use `browser.url()` with relative paths; set `baseUrl` in config
+
+## Element Handling
+- Prefer semantic selectors: `aria/`, role-based, then `data-testid`, last resort CSS
+- Cache selectors as getter properties in page objects for lazy evaluation
+- Use `waitForDisplayed`, `waitForEnabled`, and `waitForExist` with explicit timeouts
+- Handle iframes with `browser.switchToFrame()` and always switch back after interaction
+- Interact with shadow DOM via `shadow$` / `shadow$$` selectors
+
+## Page Object Pattern
+```typescript
+// pages/login.page.ts
+import { $ } from '@wdio/globals'
+
+class LoginPage {
+  get emailInput()    { return $('[data-testid="email-input"]') }
+  get passwordInput() { return $('[data-testid="password-input"]') }
+  get submitButton()  { return $('[data-testid="submit-button"]') }
+  get errorMessage()  { return $('[data-testid="error-message"]') }
+
+  async open() {
+    await browser.url('/login')
+  }
+
+  async login(email: string, password: string) {
+    await this.emailInput.setValue(email)
+    await this.passwordInput.setValue(password)
+    await this.submitButton.click()
+  }
+}
+
+export default new LoginPage()
+```
+
+## Test Data Management
+- Store test credentials and base URLs in environment variables via `dotenv`
+- Use fixtures for reusable datasets; never hardcode sensitive values in specs
+- Generate dynamic test data with `@faker-js/faker` for isolation between runs
+- Clean up created test data in `after`/`afterEach` hooks or via API calls
+
+## Configuration
+- Define separate `wdio.conf.ts` files for local, CI, and cross-browser runs
+- Enable `headless` mode in CI; keep headed mode available for local debugging
+- Set `maxInstances` and `bail` values appropriate to the target environment
+- Configure `specFileRetries` sparingly (1–2 max) to handle genuine flakiness
+- Use `@wdio/allure-reporter` or `spec` reporter based on environment
+
+## API Integration
+- Call REST endpoints directly in `before` hooks to seed or reset state
+- Use `browser.mock()` to intercept and stub network requests in component tests
+- Validate API responses alongside UI assertions for end-to-end coverage
+- Prefer API teardown over UI teardown for speed
+
+## Visual Testing
+- Integrate `@wdio/visual-service` for screenshot comparison
+- Store baseline images under version control in a dedicated `visual-baselines/` folder
+- Update baselines intentionally with `--updateSnapshots` flag; review diffs in PRs
+- Mask dynamic regions (timestamps, ads) to reduce false positives
+
+## Mobile Testing
+- Extend the same Page Object pattern for Appium-backed WDIO mobile configs
+- Use `driver.isAndroid` / `driver.isIOS` guards only where platform behaviour differs
+- Manage real-device or emulator caps in separate `wdio.mobile.conf.ts`
+
+## CI/CD Integration
+- Run WDIO in parallel with `--maxInstances` tuned to available CI workers
+- Upload Allure or JUnit XML reports as CI artefacts for every pipeline run
+- Fail the pipeline on test failure; use exit code from `wdio` CLI directly
+- Cache `node_modules` and browser binaries between pipeline runs for speed
+
+## Reporting
+- Use `@wdio/allure-reporter` for detailed HTML reports with screenshots on failure
+- Attach screenshots automatically in `afterTest` hook when the test fails
+- Capture browser logs and append to report output for debugging
+- Configure `--reporter=spec` locally for readable terminal output
+
+## Documentation
+- Document selector strategy and page object conventions in `docs/CONTRIBUTING.md`
+- Maintain a `README.md` with setup instructions, environment variables, and run commands
+- Add JSDoc comments to page object methods describing parameters and side effects
+- Include architecture diagram showing config → spec → page object → helper relationships
+
+Remember to leverage WebdriverIO's protocol-agnostic design: the same framework configuration supports Selenium, Chrome DevTools Protocol (CDP), and Appium with minimal changes.
