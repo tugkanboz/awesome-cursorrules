@@ -1,0 +1,97 @@
+# Project: Jest JavaScript Unit Test Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript/TypeScript projects
+- Organize tests in __tests__ directories or co-locate with source files using .test.js/.spec.js extensions
+- Use TypeScript with ts-jest or Babel transform for type-safe test implementations
+- Configure Jest via jest.config.js or jest.config.ts at the project root
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices and consistent naming conventions
+- Use meaningful describe and test/it block names that read as plain English
+- Keep tests short and focused on a single behavior
+- Limit describe block nesting to 3 levels maximum
+
+## Test Organization
+- Group related tests using describe blocks
+- Use it/test functions for individual test cases
+- Implement beforeEach/afterEach and beforeAll/afterAll for setup and teardown
+- Separate unit, integration, and component tests into distinct directories
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern for clear test structure
+- Write focused, single-responsibility tests with one logical assertion per test
+- Avoid test interdependencies and shared mutable state between tests
+- Use jest.fn() for creating mock functions instead of manual mocks
+- Clear mocks between tests using jest.clearAllMocks() or clearMocks: true in config
+
+## Mocking Strategies
+- Use jest.mock() for module-level mocking with automatic hoisting
+- Use jest.spyOn() to observe and optionally mock existing methods
+- Use jest.useFakeTimers() for testing setTimeout, setInterval, and Date
+- Mock HTTP requests with msw (Mock Service Worker) or jest.mock() on axios/fetch
+- Use jest.resetModules() when module state must be isolated between tests
+
+## Assertions
+- Use expect() with descriptive matchers (toBe, toEqual, toContain, toThrow)
+- Implement custom matchers via expect.extend() for domain-specific assertions
+- Use toMatchSnapshot() and toMatchInlineSnapshot() for stable output testing
+- Prefer toEqual for deep equality checks over toBe for objects and arrays
+- Use expect.objectContaining() and expect.arrayContaining() for partial matches
+
+## Coverage
+- Configure coverage with --coverage flag or collectCoverage: true in config
+- Use istanbul (default) as the coverage provider for detailed reports
+- Set meaningful coverage thresholds for branches, functions, lines, and statements
+- Use coveragePathIgnorePatterns to exclude generated or non-testable files
+- Generate lcov reports for CI integration with coverage services
+
+## Performance
+- Use --runInBand for debugging; rely on default worker pool for CI speed
+- Implement test.concurrent for independent async tests when needed
+- Use --testPathPattern or --testNamePattern to run targeted subsets during development
+- Configure maxWorkers appropriately for CI environments to avoid resource contention
+
+## Component Testing
+- Integrate jest-environment-jsdom for DOM-based component tests
+- Use Testing Library (@testing-library/react, /vue, /svelte) for user-centric assertions
+- Mock child components only when isolating the unit under test is critical
+- Use screen.getByRole, getByLabelText, and getByText over implementation-detail selectors
+
+## Test Data Management
+- Use factory functions for creating reusable, composable test data
+- Define TypeScript interfaces for all test data structures
+- Avoid hardcoded magic values; use named constants or fixtures
+- Generate dynamic data with @faker-js/faker when realistic variety is needed
+
+## CI/CD Integration
+- Use --ci flag in CI environments to disable watch mode and fail on missing snapshots
+- Use --reporters=default and jest-junit for JUnit-compatible CI reporting
+- Cache node_modules and Jest's transform cache between CI runs for speed
+- Upload coverage reports to Codecov, SonarQube, or similar services
+
+## Environment Configuration
+- Use jest.config.js testEnvironment to switch between node and jsdom
+- Configure moduleNameMapper for path aliases and CSS/asset mocks
+- Use setupFilesAfterFramework for global matchers and testing-library setup
+- Handle environment variables with dotenv or cross-env in test scripts
+
+## Error Handling
+- Test both success and failure paths explicitly
+- Assert on specific error messages and types using toThrow(ErrorClass, 'message')
+- Use expect(asyncFn()).rejects.toThrow() for async error assertions
+- Ensure rejected promises are always awaited to avoid false positives
+
+## Snapshot Testing
+- Keep snapshot files in version control alongside test files
+- Update snapshots intentionally with --updateSnapshot, not as a habit
+- Prefer toMatchInlineSnapshot() for small outputs to keep context local
+- Delete obsolete snapshots regularly to avoid maintaining stale baselines
+
+## Documentation
+- Document complex test scenarios with brief inline comments explaining intent
+- Maintain a test helper and fixture README for shared utilities
+- Include examples for custom matchers and mock factories
+- Document project-specific module mock strategies and any jest.config quirks
+
+Remember to leverage Jest's rich ecosystem (jest-extended, jest-axe, jest-mock-extended) and keep tests deterministic, isolated, and fast.
