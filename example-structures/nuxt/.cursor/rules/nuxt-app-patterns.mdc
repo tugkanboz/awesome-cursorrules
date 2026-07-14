@@ -1,0 +1,400 @@
+---
+description: Nuxt 3 + Vue 3 patterns — Composition API, auto-imports, data fetching, server routes, Pinia state, and SEO
+globs: **/pages/**/*.vue,**/components/**/*.vue,**/composables/**/*.ts,**/server/**/*.ts,nuxt.config.*,app.vue
+alwaysApply: false
+---
+# Nuxt 3 + Vue 3 Excellence
+
+## Vue 3 Composition API with `<script setup>`
+
+- **Always use `<script setup>`** — it's the recommended and most ergonomic API
+- Declare props and emits with `defineProps`/`defineEmits` (or `defineModel` for two-way binding)
+- Prefer `ref` for primitives, `reactive` for complex objects — but keep it consistent per component
+
+```vue
+<!-- ✅ components/UserCard.vue -->
+<script setup lang="ts">
+interface User {
+  id: string
+  name: string
+  email: string
+  role: 'admin' | 'user'
+}
+
+interface Props {
+  user: User
+  compact?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  compact: false,
+})
+
+const emit = defineEmits<{
+  edit: [userId: string]
+  delete: [userId: string]
+}>()
+
+const isExpanded = ref(false)
+
+const displayName = computed(() =>
+  props.compact ? props.user.name.split(' ')[0] : props.user.name
+)
+
+function handleEdit() {
+  emit('edit', props.user.id)
+}
+</script>
+
+<template>
+  <div :class="['user-card', { 'user-card--compact': compact }]">
+    <h3>{{ displayName }}</h3>
+    <p v-if="!compact">{{ user.email }}</p>
+    <span class="role-badge">{{ user.role }}</span>
+    <button @click="handleEdit">Edit</button>
+  </div>
+</template>
+```
+
+## Nuxt 3 Directory Structure
+
+```
+nuxt-app/
+├── app.vue                   # App entry point — contains <NuxtLayout> and <NuxtPage>
+├── nuxt.config.ts            # Nuxt configuration
+├── pages/                    # File-based routing (auto-imported)
+│   ├── index.vue             # Route: /
+│   ├── about.vue             # Route: /about
+│   └── users/
+│       ├── index.vue         # Route: /users
+│       └── [id].vue          # Route: /users/:id (dynamic)
+├── components/               # Auto-imported components
+│   ├── AppHeader.vue
+│   └── ui/
+│       └── Button.vue        # Used as <UiButton> (prefix by folder)
+├── composables/              # Auto-imported composables (useXxx naming)
+│   └── useUsers.ts
+├── utils/                    # Auto-imported utility functions
+│   └── formatDate.ts
+├── layouts/
+│   ├── default.vue           # Applied unless overridden
+│   └── dashboard.vue         # Applied via definePageMeta
+├── middleware/
+│   └── auth.ts               # Navigation guards
+├── server/
+│   ├── api/                  # API routes — /api/* prefix
+│   │   ├── users/
+│   │   │   ├── index.get.ts  # GET /api/users
+│   │   │   └── [id].get.ts   # GET /api/users/:id
+│   │   └── users.post.ts     # POST /api/users
+│   └── middleware/           # Server middleware (runs on every request)
+└── public/                   # Static assets served from /
+```
+
+## Data Fetching with `useFetch` and `useAsyncData`
+
+```vue
+<!-- ✅ pages/users/index.vue -->
+<script setup lang="ts">
+interface User {
+  id: string
+  name: string
+  email: string
+}
+
+// useFetch — shorthand for useAsyncData + $fetch, reactive to URL changes
+const { data: users, status, refresh } = await useFetch<User[]>('/api/users', {
+  default: () => [],
+})
+
+// useAsyncData — for custom async logic or when you need the key
+const { data: stats } = await useAsyncData('dashboard-stats', () =>
+  $fetch('/api/stats')
+)
+
+// Lazy fetch — doesn't block navigation, shows loading state
+const { data: recommendations, pending } = useLazyFetch<User[]>('/api/recommendations')
+
+useSeoMeta({
+  title: 'Users',
+  description: 'Manage all users in the system',
+})
+</script>
+
+<template>
+  <div>
+    <h1>Users</h1>
+
+    <div v-if="status === 'pending'">Loading…</div>
+    <div v-else-if="status === 'error'">Failed to load users.</div>
+    <ul v-else>
+      <li v-for="user in users" :key="user.id">
+        <NuxtLink :to="`/users/${user.id}`">{{ user.name }}</NuxtLink>
+      </li>
+    </ul>
+
+    <button @click="refresh">Refresh</button>
+  </div>
+</template>
+```
+
+```vue
+<!-- ✅ pages/users/[id].vue — dynamic route with typed params -->
+<script setup lang="ts">
+const route = useRoute()
+const id = computed(() => route.params.id as string)
+
+const { data: user, error } = await useFetch(() => `/api/users/${id.value}`)
+
+if (error.value) {
+  throw createError({ statusCode: 404, statusMessage: 'User not found' })
+}
+
+useSeoMeta({
+  title: () => user.value?.name ?? 'User',
+})
+</script>
+
+<template>
+  <div v-if="user">
+    <h1>{{ user.name }}</h1>
+    <p>{{ user.email }}</p>
+  </div>
+</template>
+```
+
+## Composables (Auto-imported from `composables/`)
+
+```typescript
+// ✅ composables/useUsers.ts
+interface User {
+  id: string
+  name: string
+  email: string
+}
+
+interface CreateUserPayload {
+  name: string
+  email: string
+}
+
+export function useUsers() {
+  const users = useState<User[]>('users', () => [])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  async function fetchUsers() {
+    loading.value = true
+    error.value = null
+    try {
+      users.value = await $fetch<User[]>('/api/users')
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch users'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function createUser(payload: CreateUserPayload) {
+    const newUser = await $fetch<User>('/api/users', {
+      method: 'POST',
+      body: payload,
+    })
+    users.value.push(newUser)
+    return newUser
+  }
+
+  async function deleteUser(id: string) {
+    await $fetch(`/api/users/${id}`, { method: 'DELETE' })
+    users.value = users.value.filter((u) => u.id !== id)
+  }
+
+  return { users: readonly(users), loading: readonly(loading), error: readonly(error), fetchUsers, createUser, deleteUser }
+}
+```
+
+## Server Routes (Nitro)
+
+```typescript
+// ✅ server/api/users/index.get.ts — GET /api/users
+import { z } from 'zod'
+
+export default defineEventHandler(async (event) => {
+  const query = getQuery(event)
+  const page = Number(query.page ?? 1)
+  const limit = Number(query.limit ?? 20)
+
+  const users = await useStorage('db').getItem<User[]>('users') ?? []
+
+  return {
+    users: users.slice((page - 1) * limit, page * limit),
+    total: users.length,
+    page,
+    limit,
+  }
+})
+
+// ✅ server/api/users.post.ts — POST /api/users
+const createUserSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+})
+
+export default defineEventHandler(async (event) => {
+  const body = await readValidatedBody(event, createUserSchema.parse)
+
+  const newUser = {
+    id: crypto.randomUUID(),
+    ...body,
+    createdAt: new Date().toISOString(),
+  }
+
+  const users = await useStorage('db').getItem<User[]>('users') ?? []
+  users.push(newUser)
+  await useStorage('db').setItem('users', users)
+
+  setResponseStatus(event, 201)
+  return newUser
+})
+
+// ✅ server/middleware/auth.ts — protect /api/admin/* routes
+export default defineEventHandler((event) => {
+  if (getRequestURL(event).pathname.startsWith('/api/admin')) {
+    const token = getHeader(event, 'authorization')?.replace('Bearer ', '')
+    if (!token || !verifyToken(token)) {
+      throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+    }
+  }
+})
+```
+
+## Page Metadata and Layouts
+
+```vue
+<!-- ✅ pages/dashboard/index.vue -->
+<script setup lang="ts">
+definePageMeta({
+  layout: 'dashboard',
+  middleware: ['auth'],
+})
+
+useSeoMeta({
+  title: 'Dashboard',
+  ogTitle: 'My App – Dashboard',
+  description: 'View your activity and stats',
+  ogDescription: 'View your activity and stats',
+})
+</script>
+
+<template>
+  <div>
+    <h1>Dashboard</h1>
+    <slot />
+  </div>
+</template>
+```
+
+```vue
+<!-- ✅ layouts/dashboard.vue -->
+<template>
+  <div class="dashboard-layout">
+    <AppSidebar />
+    <main>
+      <AppHeader />
+      <slot />
+    </main>
+  </div>
+</template>
+```
+
+## State Management with Pinia
+
+```typescript
+// ✅ stores/auth.ts
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const token = useCookie<string | null>('auth-token', { default: () => null })
+
+  const isAuthenticated = computed(() => !!user.value && !!token.value)
+
+  async function login(email: string, password: string) {
+    const response = await $fetch<{ user: User; token: string }>('/api/auth/login', {
+      method: 'POST',
+      body: { email, password },
+    })
+    user.value = response.user
+    token.value = response.token
+    await navigateTo('/dashboard')
+  }
+
+  async function logout() {
+    await $fetch('/api/auth/logout', { method: 'POST' })
+    user.value = null
+    token.value = null
+    await navigateTo('/login')
+  }
+
+  async function fetchCurrentUser() {
+    if (!token.value) return
+    try {
+      user.value = await $fetch<User>('/api/auth/me', {
+        headers: { authorization: `Bearer ${token.value}` },
+      })
+    } catch {
+      user.value = null
+      token.value = null
+    }
+  }
+
+  return { user: readonly(user), isAuthenticated, login, logout, fetchCurrentUser }
+})
+```
+
+## Nuxt Config Best Practices
+
+```typescript
+// ✅ nuxt.config.ts
+export default defineNuxtConfig({
+  compatibilityDate: '2024-11-01',
+  devtools: { enabled: true },
+
+  modules: [
+    '@pinia/nuxt',
+    '@nuxt/image',
+    '@nuxtjs/tailwindcss',
+    '@nuxt/icon',
+  ],
+
+  runtimeConfig: {
+    // Server-only secrets (never exposed to client)
+    databaseUrl: process.env.DATABASE_URL,
+    jwtSecret: process.env.JWT_SECRET,
+
+    // Exposed to client via useRuntimeConfig().public
+    public: {
+      apiBase: process.env.API_BASE ?? '/api',
+      appName: 'My Nuxt App',
+    },
+  },
+
+  typescript: {
+    strict: true,
+  },
+
+  nitro: {
+    storage: {
+      db: { driver: 'fs', base: './.data/db' },
+    },
+  },
+})
+```
+
+## Key Rules
+
+- **Auto-imports**: Components, composables, and utils are auto-imported — no manual `import` needed for files in `components/`, `composables/`, `utils/`
+- **`useState` for SSR-safe shared state** — use it instead of a raw `ref` at the module level to avoid hydration mismatches
+- **`useCookie` for persistent state** — reads/writes cookies in both client and server contexts
+- **`$fetch` vs `useFetch`**: use `$fetch` inside event handlers and composables; use `useFetch`/`useAsyncData` in components/pages for SSR + hydration support
+- **Avoid `window`/`document` at module level** — wrap in `onMounted` or check `import.meta.client`
+- **`definePageMeta` must be a static literal** — no dynamic values; it's extracted at build time
+- **Server routes are file-name-routed**: `users.get.ts` → `GET /api/users`; `[id].delete.ts` → `DELETE /api/users/:id`
