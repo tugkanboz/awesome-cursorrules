@@ -1,0 +1,87 @@
+# Project: Robot Framework Test Automation
+
+## Framework Structure
+- Use Robot Framework as the primary keyword-driven test automation framework
+- Organize test suites in .robot files under a tests/ directory
+- Store custom keywords in a keywords/ directory, separated by domain
+- Store reusable resources (variables, settings) in a resources/ directory
+- Use a separate libraries/ directory for custom Python keyword libraries
+
+## Coding Standards
+- Follow the Robot Framework style guide: four-space indentation for separating tokens
+- Use CamelCase for keyword names and UPPER_CASE for variable names
+- Limit test case length to 20 steps; extract longer sequences into keywords
+- Use meaningful, action-oriented keyword names that read like plain English sentences
+
+## Test Organization
+- One test suite (.robot file) per functional area or feature
+- Use Suite Setup / Suite Teardown for shared preconditions and cleanup
+- Use Test Setup / Test Teardown for per-test state management
+- Tag tests with [Tags] for filtering (e.g., smoke, regression, critical, skip)
+- Group related .robot files into subdirectories reflecting the application structure
+
+## Best Practices
+- Write tests at a high abstraction level using business-domain keywords
+- Keep test cases free of implementation details; delegate details to keyword layer
+- Implement the Page Object pattern via Resource files for UI automation
+- Avoid hardcoded test data inside test cases; use Variables or external data files
+- Use BuiltIn.Run Keyword And Continue On Failure only when explicit; prefer atomic tests
+
+## Keyword Development
+- Create three-layer keyword architecture: Business, Action, and Technical layers
+- Implement Business keywords to represent user stories (e.g., "User Logs In Successfully")
+- Implement Action keywords for UI interactions (e.g., "Click Submit Button")
+- Implement Technical keywords that wrap library calls with error handling
+- Store keywords in separate .resource files; import via Resource in test suites
+
+## Variable Management
+- Define environment-specific variables in separate variable files (e.g., dev.yaml, prod.yaml)
+- Pass variable files via --variablefile at execution time for environment switching
+- Use ${VAR} for scalar, @{LIST} for list, and &{DICT} for dictionary variables
+- Store secrets in environment variables; never hardcode credentials in .robot files
+- Use VAR syntax (RF 7+) for inline variable assignment within keywords
+
+## Library Usage
+- Use SeleniumLibrary for web UI testing with explicit locator strategies (id, css, xpath)
+- Use RequestsLibrary for REST API testing
+- Use DatabaseLibrary for database validation in integration tests
+- Implement custom Python libraries by extending robot.api.deco decorators
+- Pin library versions in requirements.txt for reproducible execution
+
+## Locator Strategy
+- Prefer data-testid or data-qa attributes as primary locators for web elements
+- Use CSS selectors over XPath for performance and readability
+- Store locators as variables in page-specific Resource files
+- Use SeleniumLibrary's Page Should Contain Element with custom error messages
+
+## Execution and Configuration
+- Use robot.yaml or a Makefile to define standard execution commands
+- Configure output directory (--outputdir results/) and log level (--loglevel INFO)
+- Use --include and --exclude tags to control which tests run in each environment
+- Enable parallel execution with pabot (Parallel Robot Framework executor) for large suites
+
+## Reporting
+- Use the built-in log.html and report.html for local review after each run
+- Integrate with Allure via robotframework-allure-listener for richer CI reports
+- Archive output.xml artifacts in CI for post-run result analysis
+- Configure --xunit for JUnit-compatible XML output in CI/CD pipelines
+
+## CI/CD Integration
+- Run smoke tests on every pull request; run full regression on merge to main
+- Use Docker with a pre-built Robot Framework image for consistent CI environments
+- Configure failure thresholds with --noncritical tags to distinguish advisory failures
+- Upload log.html and report.html as CI artifacts for post-run debugging
+
+## Test Data Management
+- Store static test data in YAML or JSON files under a testdata/ directory
+- Load test data using the Collections and yaml libraries
+- Implement data-driven tests with the [Template] syntax and YAML data files
+- Clean up test data in Suite Teardown to leave the environment in a known state
+
+## Documentation
+- Add [Documentation] to every test case describing its purpose and scope
+- Add [Documentation] to every keyword explaining its parameters and expected behavior
+- Maintain a README in each test suite directory describing setup and execution steps
+- Use --doc flag output to auto-generate keyword documentation with libdoc
+
+Remember to keep Robot Framework tests readable by non-technical stakeholders — clarity and plain-English keyword names are the framework's primary strength.
