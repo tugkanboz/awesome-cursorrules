@@ -26,12 +26,14 @@ awesome-cursorrules/
 ├── 📚 rules/                       # Legacy .cursorrules files (migration source)
 │   ├── appium-mobile-test-automation-framework/
 │   ├── cypress-javascript-test-automation-framework/
+│   ├── jest-typescript-unit-test-framework/
 │   ├── k6-performance-test-framework/
 │   ├── playwright-javascript-test-automation-framework/
 │   ├── restassured-java-framework/
 │   ├── selenium-net-test-automation-framework/
 │   ├── selenium-python-test-automation-framework/
-│   └── vitest-javascript-unit-test-framework/
+│   ├── vitest-javascript-unit-test-framework/
+│   └── webdriverio-javascript-test-automation-framework/
 ├── 🏗️ frameworks/                  # Framework .cursor/rules examples (with nested rules)
 │   ├── cypress/                    # .cursor/rules/{core,patterns}/*.mdc
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
@@ -456,6 +458,8 @@ Infrastructure that grows from individual projects to enterprise-scale monorepos
 - **[🌐 Cypress Testing](./example-structures/cypress/.cursor/rules/)** - E2E testing excellence
 - **[⚛️ React TypeScript](./example-structures/react-typescript/.cursor/rules/)** - Modern component development
 - **[▲ Next.js App Router](./example-structures/next-js/.cursor/rules/)** - Server Components, Route Handlers, Server Actions, and metadata API
+- **[🃏 Jest TypeScript](./rules/jest-typescript-unit-test-framework/.cursorrules)** - Unit testing with mocks, snapshots, and coverage
+- **[🤖 WebdriverIO](./rules/webdriverio-javascript-test-automation-framework/.cursorrules)** - Protocol-agnostic browser automation framework
 
 ### 🎓 **Learning Resources**
 - **[📖 Official Documentation](https://cursor.com/docs/context/rules)** - Cursor Rules comprehensive guide

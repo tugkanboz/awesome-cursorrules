@@ -1,0 +1,133 @@
+# Project: Jest TypeScript Unit Test Framework
+
+## Framework Structure
+- Use Jest as the primary test runner and assertion library
+- Use TypeScript for type-safe test implementations
+- Configure `jest.config.ts` as the single source of truth for Jest settings
+- Use `ts-jest` or `@swc/jest` transformer for TypeScript compilation
+- Separate unit, integration, and snapshot tests into distinct directories
+
+## Coding Standards
+- Follow TypeScript and ESLint best practices
+- Use Prettier for consistent code formatting
+- Maximum line length: 100 characters
+- Use `async/await` for all asynchronous tests; never mix `done` callbacks with async patterns
+- Name test files with `.test.ts` or `.spec.ts` suffix co-located with source files
+
+## Test Organisation
+- Group related tests in `describe` blocks reflecting the module or class under test
+- Use `it`/`test` with descriptive names that read as requirements ("should return X when Y")
+- Keep each `it` block focused on a single behaviour; one assertion per test is ideal
+- Use `beforeAll` / `afterAll` for expensive shared setup (e.g. DB connection); `beforeEach` / `afterEach` for per-test isolation
+- Mirror the source directory tree in your test directory when tests are not co-located
+
+## Best Practices
+- Follow the Arrange-Act-Assert (AAA) pattern in every test body
+- Avoid testing implementation details; test observable behaviour and public APIs
+- Keep tests independent and order-agnostic — never rely on state from a previous test
+- Use `jest.isolateModules()` when module-level side effects must be tested in isolation
+- Avoid `describe.only` / `it.only` in committed code; use `--testNamePattern` in CI instead
+
+## Mock and Spy Patterns
+```typescript
+// Auto-mock an entire module
+jest.mock('@/services/emailService')
+
+// Partial mock — keep real implementations for most methods
+jest.mock('@/utils/logger', () => ({
+  ...jest.requireActual('@/utils/logger'),
+  error: jest.fn(),
+}))
+
+// Spy on a method without replacing the implementation
+const spy = jest.spyOn(userRepository, 'findById')
+spy.mockResolvedValueOnce({ id: '1', name: 'Alice' })
+
+// Always clear mocks between tests
+afterEach(() => {
+  jest.clearAllMocks()
+})
+```
+
+## Assertion Patterns
+```typescript
+// Prefer specific matchers over toBe(true)
+expect(result).toEqual({ id: '1', name: 'Alice' })
+expect(fn).toHaveBeenCalledWith('expected-arg')
+expect(fn).toHaveBeenCalledTimes(1)
+expect(promise).rejects.toThrow('Error message')
+
+// Custom matchers via jest-extended for richer assertions
+expect(array).toIncludeAllMembers([1, 2, 3])
+expect(str).toStartWith('prefix')
+```
+
+## Async Testing
+```typescript
+// Always return or await async assertions
+it('should resolve with user data', async () => {
+  const user = await userService.getById('1')
+  expect(user.name).toBe('Alice')
+})
+
+// Test rejected promises
+it('should throw on missing user', async () => {
+  await expect(userService.getById('999')).rejects.toThrow('User not found')
+})
+
+// Use fake timers for time-dependent logic
+jest.useFakeTimers()
+jest.advanceTimersByTime(5000)
+jest.useRealTimers()
+```
+
+## Test Data Management
+- Use factory functions or builder patterns to create test fixtures; avoid inline literals scattered across tests
+- Store shared fixtures in a `__fixtures__/` directory next to the tests that use them
+- Generate realistic dynamic data with `@faker-js/faker`; never hardcode production-like credentials
+- Reset module registry and global state in `afterEach` to prevent test pollution
+
+## Snapshot Testing
+- Use snapshots only for stable, intentional UI output (e.g. serialised React trees, CLI output)
+- Keep snapshot files small and reviewable; avoid snapshots of entire complex objects
+- Commit snapshots to version control and review diffs in every PR
+- Update snapshots explicitly with `--updateSnapshot`; treat unexpected changes as failures
+
+## Coverage Configuration
+```typescript
+// jest.config.ts
+import type { Config } from 'jest'
+
+const config: Config = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/index.ts'],
+  coverageThresholds: {
+    global: { branches: 80, functions: 80, lines: 85, statements: 85 },
+  },
+  coverageReporters: ['text', 'lcov', 'html'],
+}
+
+export default config
+```
+- Enforce coverage thresholds in CI; never lower them without team agreement
+- Focus on branch coverage for complex conditional logic, not just line coverage
+- Exclude generated files, barrel exports, and type-only files from coverage reports
+
+## CI/CD Integration
+- Run `jest --ci --coverage` in pipelines; `--ci` disables interactive prompts and treats snapshot mismatches as failures
+- Upload coverage reports (lcov) as CI artefacts and track trends over time
+- Shard long test suites with `--shard=1/4` across parallel CI workers for speed
+- Cache `node_modules` between pipeline runs; avoid re-running `npm install` on every job
+
+## Reporting
+- Use `--verbose` locally for per-test output; avoid it in CI to keep logs readable
+- Integrate `jest-junit` reporter to produce JUnit XML for CI test result dashboards
+- Fail the pipeline on any test failure or uncovered threshold breach
+
+## Documentation
+- Document non-obvious test setup in a brief comment at the top of the `describe` block
+- Maintain a `README.md` with instructions for running tests, updating snapshots, and checking coverage
+- Add JSDoc comments to shared factory functions and custom matchers
+
+Remember to keep tests fast, deterministic, and free of network or filesystem side effects — mock external dependencies at the boundary.
