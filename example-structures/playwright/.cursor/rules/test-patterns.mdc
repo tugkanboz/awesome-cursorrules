@@ -1,0 +1,177 @@
+---
+description: Playwright test patterns — network mocking, API testing, parallel execution, assertions, and CI configuration
+globs: **/*.spec.ts,**/*.spec.js,**/tests/**/*.ts,playwright.config.*
+alwaysApply: false
+---
+# Playwright Test Patterns
+
+## Test Organization
+
+Group tests by feature using `test.describe`. Use tags for selective execution.
+
+```typescript
+// tests/checkout/checkout.spec.ts
+import { test, expect } from '../fixtures'
+
+test.describe('Checkout flow', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/cart')
+  })
+
+  test('completes purchase with valid card @smoke', async ({ page, checkoutPage }) => {
+    await checkoutPage.fillCard('4242424242424242', '12/26', '123')
+    await checkoutPage.submit()
+    await expect(page).toHaveURL(/\/order-confirmation/)
+  })
+
+  test('shows error for declined card', async ({ page, checkoutPage }) => {
+    await checkoutPage.fillCard('4000000000000002', '12/26', '123')
+    await checkoutPage.submit()
+    await expect(page.getByRole('alert')).toContainText('Your card was declined')
+  })
+})
+
+// Run only @smoke tests in CI pre-deploy:
+// npx playwright test --grep @smoke
+```
+
+## Network Interception and Mocking
+
+Use `page.route()` to intercept requests and control API responses without hitting real backends.
+
+```typescript
+test('displays products from API', async ({ page }) => {
+  // Intercept before navigation so no real request fires
+  await page.route('**/api/products', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { id: '1', name: 'Widget', price: 9.99 },
+        { id: '2', name: 'Gadget', price: 24.99 },
+      ]),
+    })
+  })
+
+  await page.goto('/products')
+  await expect(page.getByTestId('product-card')).toHaveCount(2)
+  await expect(page.getByText('Widget')).toBeVisible()
+})
+
+test('handles API error gracefully', async ({ page }) => {
+  await page.route('**/api/products', (route) =>
+    route.fulfill({ status: 500 })
+  )
+
+  await page.goto('/products')
+  await expect(page.getByRole('alert')).toContainText('Failed to load products')
+})
+
+test('verifies request payload', async ({ page }) => {
+  const requestPromise = page.waitForRequest('**/api/orders')
+
+  await page.goto('/checkout')
+  await page.getByRole('button', { name: 'Place order' }).click()
+
+  const request = await requestPromise
+  const body = request.postDataJSON()
+  expect(body).toMatchObject({ items: expect.any(Array), total: expect.any(Number) })
+})
+```
+
+## API Testing with `request` Context
+
+Use the built-in `request` fixture for direct API calls — no browser overhead.
+
+```typescript
+import { test, expect } from '@playwright/test'
+
+test('creates and retrieves a product via API', async ({ request }) => {
+  const createResponse = await request.post('/api/products', {
+    data: { name: 'New Widget', price: 14.99 },
+  })
+  expect(createResponse.ok()).toBeTruthy()
+  const { id } = await createResponse.json()
+
+  const getResponse = await request.get(`/api/products/${id}`)
+  expect(getResponse.ok()).toBeTruthy()
+  const product = await getResponse.json()
+  expect(product).toMatchObject({ id, name: 'New Widget', price: 14.99 })
+})
+```
+
+## Assertions
+
+Prefer `expect` auto-retry assertions over manual waits. All `expect(locator)` assertions poll until they pass or time out.
+
+```typescript
+// ✅ Auto-retrying locator assertions — no manual waits needed
+await expect(page.getByRole('status')).toHaveText('Saved')
+await expect(page.getByTestId('spinner')).not.toBeVisible()
+await expect(page).toHaveURL('/dashboard')
+await expect(page).toHaveTitle(/Dashboard/)
+await expect(page.getByRole('row')).toHaveCount(5)
+
+// ✅ Soft assertions — collect all failures before failing the test
+await expect.soft(page.getByTestId('price')).toContainText('$9.99')
+await expect.soft(page.getByTestId('stock')).toContainText('In stock')
+// Test continues even if the above fail; all soft errors reported together
+
+// ❌ Avoid — fragile; doesn't retry on slow UI
+const text = await page.getByTestId('status').textContent()
+expect(text).toBe('Saved')
+```
+
+## Parallel Execution
+
+Playwright runs spec files in parallel by default. Manage shared state carefully.
+
+```typescript
+// playwright.config.ts
+export default defineConfig({
+  workers: process.env.CI ? 2 : undefined, // Limit workers in CI to reduce flakiness
+  fullyParallel: true,                      // Run tests within a file in parallel too
+
+  // Retry flaky tests in CI only
+  retries: process.env.CI ? 2 : 0,
+
+  reporter: [
+    ['html'],
+    ['junit', { outputFile: 'results/junit.xml' }], // For CI integration
+  ],
+})
+```
+
+```typescript
+// ✅ Test isolation — use unique data per test to avoid cross-test conflicts
+test('user A can edit their profile', async ({ page }) => {
+  const email = `user-${Date.now()}@example.com` // Unique per test run
+  await createTestUser(email)
+  // ...
+})
+```
+
+## Visual Testing
+
+Use `toHaveScreenshot()` for visual regression testing. Commit baseline screenshots.
+
+```typescript
+test('product page matches snapshot @visual', async ({ page }) => {
+  await page.goto('/products/widget')
+  await page.getByTestId('spinner').waitFor({ state: 'hidden' }) // Wait for async content
+
+  // Mask dynamic elements (timestamps, ads) to prevent false failures
+  await expect(page).toHaveScreenshot('product-page.png', {
+    mask: [page.getByTestId('last-updated'), page.getByTestId('ad-banner')],
+    maxDiffPixelRatio: 0.02, // Allow 2% pixel difference
+  })
+})
+```
+
+## Key Rules
+
+- Each test must be independent — never depend on state from a previous test
+- Use `test.describe.configure({ mode: 'serial' })` only when tests genuinely share state and can't be isolated
+- `storageState` in `playwright.config.ts` sets the default auth for all tests — override per project for unauthenticated tests
+- Run `npx playwright test --ui` locally for step-by-step debugging with time travel
+- Artifacts (screenshots, videos, traces) auto-capture on failure in CI via `use: { trace: 'on-first-retry' }`

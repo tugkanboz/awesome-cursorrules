@@ -1,0 +1,166 @@
+---
+description: Playwright core patterns — locators, Page Object Model, fixtures, and browser context management
+globs: **/*.spec.ts,**/*.spec.js,**/pages/**/*.ts,**/fixtures/**/*.ts,playwright.config.*
+alwaysApply: false
+---
+# Playwright Core Patterns
+
+## Locator Strategy
+
+- **Prefer user-facing attributes**: `getByRole`, `getByLabel`, `getByText`, `getByTestId` over CSS/XPath
+- Use `data-testid` attributes for stable selectors that won't break on UI copy changes
+- Chain locators to narrow scope: `page.getByRole('dialog').getByRole('button', { name: 'Submit' })`
+- Avoid `page.locator('.class-name')` when a semantic query exists
+
+```typescript
+// ✅ Semantic, resilient locators
+await page.getByRole('button', { name: 'Sign in' }).click()
+await page.getByLabel('Email address').fill('user@example.com')
+await page.getByTestId('product-card').first().click()
+await page.getByRole('listitem').filter({ hasText: 'Item 3' }).getByRole('checkbox').check()
+
+// ❌ Brittle selectors — break on class renames or DOM restructuring
+await page.locator('.btn-primary').click()
+await page.locator('#email').fill('user@example.com')
+await page.locator('div > ul > li:nth-child(3) input[type=checkbox]').check()
+```
+
+## Page Object Model
+
+Encapsulate page interactions in Page Object classes. Each page/component gets its own file.
+
+```typescript
+// pages/login.page.ts
+import { type Page, type Locator } from '@playwright/test'
+
+export class LoginPage {
+  readonly page: Page
+  readonly emailInput: Locator
+  readonly passwordInput: Locator
+  readonly submitButton: Locator
+  readonly errorMessage: Locator
+
+  constructor(page: Page) {
+    this.page = page
+    this.emailInput = page.getByLabel('Email address')
+    this.passwordInput = page.getByLabel('Password')
+    this.submitButton = page.getByRole('button', { name: 'Sign in' })
+    this.errorMessage = page.getByRole('alert')
+  }
+
+  async goto() {
+    await this.page.goto('/login')
+  }
+
+  async login(email: string, password: string) {
+    await this.emailInput.fill(email)
+    await this.passwordInput.fill(password)
+    await this.submitButton.click()
+  }
+
+  async expectError(message: string) {
+    await expect(this.errorMessage).toContainText(message)
+  }
+}
+```
+
+## Fixtures
+
+Extend the base `test` object with custom fixtures to share pages, auth state, and test data across tests.
+
+```typescript
+// fixtures/index.ts
+import { test as base } from '@playwright/test'
+import { LoginPage } from '../pages/login.page'
+import { DashboardPage } from '../pages/dashboard.page'
+
+type Fixtures = {
+  loginPage: LoginPage
+  dashboardPage: DashboardPage
+  authenticatedPage: Page
+}
+
+export const test = base.extend<Fixtures>({
+  loginPage: async ({ page }, use) => {
+    await use(new LoginPage(page))
+  },
+
+  dashboardPage: async ({ page }, use) => {
+    await use(new DashboardPage(page))
+  },
+
+  // Fixture that provides a pre-authenticated browser context
+  authenticatedPage: async ({ browser }, use) => {
+    const context = await browser.newContext({
+      storageState: 'playwright/.auth/user.json',
+    })
+    const page = await context.newPage()
+    await use(page)
+    await context.close()
+  },
+})
+
+export { expect } from '@playwright/test'
+```
+
+## Browser Context Management
+
+Use browser contexts to isolate test state. Each context gets its own cookies, localStorage, and sessions.
+
+```typescript
+// Global setup: save authentication state once
+// global-setup.ts
+import { chromium, FullConfig } from '@playwright/test'
+
+async function globalSetup(config: FullConfig) {
+  const browser = await chromium.launch()
+  const page = await browser.newPage()
+
+  await page.goto('http://localhost:3000/login')
+  await page.getByLabel('Email').fill(process.env.TEST_USER_EMAIL!)
+  await page.getByLabel('Password').fill(process.env.TEST_USER_PASSWORD!)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL('**/dashboard')
+
+  // Save auth state — reuse in tests via storageState
+  await page.context().storageState({ path: 'playwright/.auth/user.json' })
+  await browser.close()
+}
+
+export default globalSetup
+```
+
+```typescript
+// playwright.config.ts — reference the saved auth state
+import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+  globalSetup: './global-setup.ts',
+  use: {
+    baseURL: 'http://localhost:3000',
+    storageState: 'playwright/.auth/user.json', // default for all tests
+  },
+  projects: [
+    {
+      name: 'setup',
+      testMatch: '**/global-setup.ts',
+    },
+    {
+      name: 'authenticated',
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'unauthenticated',
+      use: { ...devices['Desktop Chrome'], storageState: undefined },
+    },
+  ],
+})
+```
+
+## Key Rules
+
+- Always use `await` — Playwright actions return Promises; missing `await` silently no-ops
+- Never use `page.waitForTimeout()` for synchronization — use `waitForURL`, `waitForLoadState`, or assert the expected state
+- Declare locators as `readonly` class members in Page Objects so they're computed once and reused
+- Keep `playwright/.auth/` in `.gitignore` — auth state files contain session tokens

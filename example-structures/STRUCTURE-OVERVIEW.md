@@ -40,6 +40,21 @@ cypress/
 - **Testing Fundamentals**: Element selection, smart waits, test organization
 - **API Testing Excellence**: Network interception, error simulation, real-time features
 
+### 🎭 Playwright E2E Testing
+```
+playwright/
+├── .cursor/rules/
+│   ├── core-patterns.mdc             # Locators, Page Object Model, fixtures, browser contexts
+│   └── test-patterns.mdc             # Network mocking, API testing, parallel execution, visual testing
+└── tests/
+```
+
+**Key Features:**
+- **Core Patterns**: Semantic locators (`getByRole`, `getByLabel`), Page Object Model, reusable fixtures
+- **Test Patterns**: Network interception, direct API testing via `request`, soft assertions
+- **Parallel Execution**: Worker configuration, test isolation, retry strategies for CI
+- **Visual Testing**: Screenshot comparison with dynamic element masking
+
 ### ⚛️ React TypeScript
 ```
 react-typescript/
@@ -100,7 +115,13 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 - **Real-time Features**: WebSocket mocking, live data updates
 - **Custom Commands**: Reusable API testing utilities
 
-### 3. React TypeScript Patterns
+### 3. Playwright E2E Testing
+- **Semantic Locators**: `getByRole`, `getByLabel`, `getByTestId` — resilient to DOM changes
+- **Page Object Model**: Encapsulated interactions, `readonly` locator members, fixture composition
+- **Network Control**: `page.route()` for mocking, `request` fixture for direct API calls
+- **CI-Ready**: Parallel execution, retry config, trace/screenshot artifacts on failure
+
+### 4. React TypeScript Patterns
 - **Type-Safe Components**: Comprehensive interfaces, proper prop types
 - **Performance Optimization**: useMemo, useCallback, React.memo strategies
 - **Form Excellence**: React Hook Form with Zod validation
@@ -127,7 +148,7 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ## 🎉 Getting Started
 
 ### Quick Setup
-1. **Choose Framework**: Select from Selenium Python, Cypress, or React TypeScript
+1. **Choose Framework**: Select from Selenium Python, Cypress, Playwright, or React TypeScript
 2. **Copy Rules**: Copy `.mdc` files to your project's `.cursor/rules/` directory
 3. **Customize**: Adjust glob patterns and examples to match your project structure
 4. **Iterate**: Refine rules based on team feedback and project needs
