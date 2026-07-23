@@ -1,0 +1,116 @@
+# Project: Detox React Native E2E Test Automation Framework
+
+## Framework Structure
+- Use Detox as the end-to-end testing framework for React Native applications
+- Organize tests in an `e2e/` directory at the project root
+- Keep test specs in `e2e/tests/` and helper utilities in `e2e/helpers/`
+- Use `e2e/jest.config.js` and `.detoxrc.js` (or `.detoxrc.json`) as configuration entry points
+- Use TypeScript with `ts-jest` for type-safe test implementations
+
+## Coding Standards
+- Follow TypeScript best practices and configure `tsconfig.json` under `e2e/`
+- Use ESLint with `@typescript-eslint` for test code quality enforcement
+- Use descriptive test names that read as user stories: `it('should display error when login fails')`
+- Maximum line length: 100 characters
+
+## Test Organisation
+- Group tests by feature or user flow using `describe` blocks
+- One spec file per screen or major user journey (e.g. `login.spec.ts`, `checkout.spec.ts`)
+- Use `beforeAll`/`afterAll` for app launch and shutdown; `beforeEach`/`afterEach` for navigation resets
+- Tag slow or flaky tests with `.skip` or a custom tag during triage; remove the tag before merging
+
+## Best Practices
+- Always launch the app fresh per suite with `await device.launchApp({ newInstance: true })`
+- Use `device.reloadReactNative()` for cheap state resets mid-suite when a full relaunch is unnecessary
+- Never use arbitrary `waitFor` durations; rely on Detox's built-in synchronisation and `waitFor(...).toBeVisible()`
+- Keep tests independent: each `it` must be runnable in isolation without previous tests passing first
+- Prefer interaction-first selectors (`getByText`, `getByRole`) over brittle testID-only strategies when React Native Testing Library is co-used
+
+## Element Selection
+- Use `testID` props on React Native components as the primary Detox selector: `element(by.id('login-button'))`
+- Combine matchers with `and()` to narrow selections when `testID` alone is ambiguous
+- Use `by.text()` for static labels and `by.type()` for native component type matching as fallbacks
+- Keep `testID` values stable across refactors — treat them as part of the public API
+
+```typescript
+// Preferred: stable testID selector
+const loginButton = element(by.id('login-button'))
+await expect(loginButton).toBeVisible()
+await loginButton.tap()
+
+// Fallback: narrow by type and text
+const submitBtn = element(by.type('RCTView').and(by.text('Submit')))
+```
+
+## Interactions
+- Use `.tap()`, `.longPress()`, `.multiTap(count)` for touch interactions
+- Use `.typeText()` to enter text; call `.clearText()` before `.typeText()` if the field may be pre-filled
+- Use `.scroll(pixels, direction)` for scrollable containers
+- Use `.swipe(direction, speed, normalizedOffset)` for gesture-dependent UI
+- Dismiss the software keyboard explicitly with `device.pressBack()` (Android) or via a done/return action on iOS
+
+## Synchronisation and Waiting
+- Trust Detox's automatic synchronisation with the React Native bridge, timers, and network by default
+- Disable auto-sync for non-deterministic animations or polling with `await device.disableSynchronization()`; re-enable immediately after
+- Use `waitFor(element).toBeVisible().withTimeout(5000)` only when auto-sync cannot detect the trigger
+- Avoid `jestExpect(condition).toBeTruthy()` on Detox matchers — use `expect(element).toBeVisible()` instead
+
+## Device and Platform Configuration
+- Define separate Detox configurations in `.detoxrc.js` for simulator/emulator and real-device targets
+- Use environment variables (`process.env.DETOX_CONFIGURATION`) to switch configs in CI
+- Run iOS tests on the Simulator build target; Android tests on an AVD or a connected device
+- Enable headless mode in CI with `--headless` flag for Android AVD
+
+```js
+// .detoxrc.js excerpt
+module.exports = {
+  testRunner: { args: { config: 'e2e/jest.config.js', testTimeout: 120_000 } },
+  apps: {
+    'ios.release': { type: 'ios.app', binaryPath: 'ios/build/Release/MyApp.app' },
+    'android.release': { type: 'android.apk', binaryPath: 'android/app/build/outputs/apk/release/app-release.apk' },
+  },
+  devices: {
+    simulator: { type: 'ios.simulator', device: { type: 'iPhone 15' } },
+    emulator: { type: 'android.emulator', device: { avdName: 'Pixel_6_API_34' } },
+  },
+  configurations: {
+    'ios.sim.release': { device: 'simulator', app: 'ios.release' },
+    'android.emu.release': { device: 'emulator', app: 'android.release' },
+  },
+}
+```
+
+## Test Data Management
+- Reset app state between tests using `device.launchApp({ delete: true })` for a clean install, or via a mock server reset endpoint
+- Use environment variables injected via `launchArgs` to switch API endpoints or enable test modes
+- Never hardcode real credentials; inject them through `process.env` or `launchApp({ launchArgs })` at CI time
+- Use `device.setURLBlacklist([])` or mock servers (e.g. `msw`, `nock`) to isolate tests from live backends
+
+## Mock Server Integration
+- Start a local mock server in `globalSetup` and shut it down in `globalTeardown` for hermetic test runs
+- Point the app at the mock server via a launch argument: `launchApp({ launchArgs: { apiUrl: 'http://localhost:3000' } })`
+- Record and replay network fixtures with tools like `polly.js` or `msw` for stable offline execution
+
+## Screenshot and Artefact Collection
+- Configure `testArtifacts` in `.detoxrc.js` to capture screenshots on failure automatically
+- Collect videos in CI by setting `artifacts.videos.enabled: true`; disable locally to save disk
+- Store artefacts in a run-specific directory using Detox's `artifactsLocation` option
+
+## CI/CD Integration
+- Build the app in Release mode before running Detox tests: `xcodebuild` or `./gradlew assembleRelease`
+- Run tests with `--retries 1` in CI to handle genuine platform flakiness; set `--bail` to stop early on systematic failures
+- Run iOS and Android suites in parallel on separate CI jobs; share the same test sources
+- Upload artefacts (screenshots, videos, JUnit XML) as CI build artefacts for post-run investigation
+- Cache `node_modules`, Gradle/CocoaPods dependencies, and the built app binary between runs for speed
+
+## Reporting
+- Configure the `jest-junit` reporter in `e2e/jest.config.js` for CI pipeline integration
+- Generate human-readable HTML reports with `jest-html-reporter` for manual review
+- Annotate failing screenshots with test names using Detox's built-in artefact hooks
+
+## Documentation
+- Document the local setup process (install, build, run) in `e2e/README.md`
+- List required environment variables and their purpose in a `.env.example` file under `e2e/`
+- Add inline comments only for non-obvious synchronisation workarounds or platform-specific quirks
+
+Remember to keep Detox, the React Native SDK, and the installed app binary in sync — version mismatches between the Detox runtime and the native layer are the most common source of unexpected test failures.
