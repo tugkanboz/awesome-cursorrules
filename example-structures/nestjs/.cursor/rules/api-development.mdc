@@ -1,0 +1,307 @@
+---
+description: NestJS REST API geliştirme kalıpları — modüller, servisler, guard, DTO doğrulama ve hata yönetimi
+globs: **/*.controller.ts,**/*.service.ts,**/*.module.ts,**/*.guard.ts,**/*.interceptor.ts,**/*.dto.ts,**/*.entity.ts
+alwaysApply: false
+---
+# NestJS API Development Excellence
+
+## Module Architecture
+- **Feature Modules**: Encapsulate each domain (users, orders, auth) in its own module
+- **Shared Modules**: Export reusable providers (database, mailer, config) from a SharedModule
+- **Core Module**: Use `@Global()` for app-wide singletons; register only once in AppModule
+- **Barrel Exports**: Export public API from each module's index.ts for clean imports
+
+## Module Structure Pattern
+```typescript
+// ✅ Feature module with clear boundaries
+@Module({
+  imports: [TypeOrmModule.forFeature([User]), JwtModule],
+  controllers: [UsersController],
+  providers: [UsersService, UsersRepository],
+  exports: [UsersService],
+})
+export class UsersModule {}
+```
+
+## Controller Design
+```typescript
+// ✅ Thin controller — delegate all logic to service
+@Controller('users')
+@UseGuards(JwtAuthGuard)
+@ApiTags('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get user by ID' })
+  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<UserResponseDto> {
+    return this.usersService.findOneOrFail(id)
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
+    return this.usersService.create(dto)
+  }
+
+  @Patch(':id')
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() actor: AuthUser,
+  ): Promise<UserResponseDto> {
+    return this.usersService.update(id, dto, actor)
+  }
+}
+```
+
+## DTO Validation
+```typescript
+// ✅ Use class-validator + class-transformer for all input DTOs
+import { IsEmail, IsString, MinLength, IsOptional, IsEnum } from 'class-validator'
+import { Transform, Expose } from 'class-transformer'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+
+export class CreateUserDto {
+  @ApiProperty({ example: 'alice@example.com' })
+  @IsEmail()
+  @Transform(({ value }) => value?.toLowerCase().trim())
+  email: string
+
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  password: string
+
+  @ApiPropertyOptional({ enum: Role, default: Role.USER })
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role = Role.USER
+}
+
+// ✅ Response DTOs — never expose raw entities
+export class UserResponseDto {
+  @Expose() id: string
+  @Expose() email: string
+  @Expose() role: Role
+  @Expose() createdAt: Date
+  // password is intentionally absent
+}
+```
+
+## Service Layer
+```typescript
+// ✅ Services own business logic and error handling
+@Injectable()
+export class UsersService {
+  constructor(
+    private readonly usersRepo: UsersRepository,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  async findOneOrFail(id: string): Promise<UserResponseDto> {
+    const user = await this.usersRepo.findById(id)
+    if (!user) {
+      throw new NotFoundException(`User ${id} not found`)
+    }
+    return plainToInstance(UserResponseDto, user, { excludeExtraneousValues: true })
+  }
+
+  async create(dto: CreateUserDto): Promise<UserResponseDto> {
+    const existing = await this.usersRepo.findByEmail(dto.email)
+    if (existing) {
+      throw new ConflictException('Email already registered')
+    }
+
+    const hashed = await bcrypt.hash(dto.password, 12)
+    const user = await this.usersRepo.save({ ...dto, password: hashed })
+
+    this.eventEmitter.emit('user.created', new UserCreatedEvent(user.id))
+
+    return plainToInstance(UserResponseDto, user, { excludeExtraneousValues: true })
+  }
+}
+```
+
+## Guards and Auth
+```typescript
+// ✅ JWT guard with role-based access control
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  canActivate(context: ExecutionContext) {
+    return super.canActivate(context)
+  }
+
+  handleRequest<T>(err: Error, user: T): T {
+    if (err || !user) {
+      throw err ?? new UnauthorizedException()
+    }
+    return user
+  }
+}
+
+// ✅ Roles decorator + guard combination
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles)
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const required = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ])
+    if (!required) return true
+
+    const { user } = context.switchToHttp().getRequest<Request & { user: AuthUser }>()
+    return required.includes(user.role)
+  }
+}
+```
+
+## Exception Handling
+```typescript
+// ✅ Global exception filter for consistent error shape
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp()
+    const response = ctx.getResponse<Response>()
+
+    const status =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR
+
+    const message =
+      exception instanceof HttpException
+        ? exception.getResponse()
+        : 'Internal server error'
+
+    response.status(status).json({
+      statusCode: status,
+      message,
+      timestamp: new Date().toISOString(),
+    })
+  }
+}
+```
+
+## Interceptors
+```typescript
+// ✅ Logging interceptor for observability
+@Injectable()
+export class LoggingInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(LoggingInterceptor.name)
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const req = context.switchToHttp().getRequest<Request>()
+    const start = Date.now()
+
+    return next.handle().pipe(
+      tap(() => {
+        this.logger.log(`${req.method} ${req.url} — ${Date.now() - start}ms`)
+      }),
+    )
+  }
+}
+
+// ✅ Transform interceptor: wrap all responses in { data: ... }
+@Injectable()
+export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
+  intercept(_: ExecutionContext, next: CallHandler): Observable<ApiResponse<T>> {
+    return next.handle().pipe(map((data) => ({ data, success: true })))
+  }
+}
+```
+
+## Configuration
+```typescript
+// ✅ Typed config with @nestjs/config + Joi validation
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: Joi.object({
+        NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
+        PORT: Joi.number().default(3000),
+        DATABASE_URL: Joi.string().required(),
+        JWT_SECRET: Joi.string().min(32).required(),
+        JWT_EXPIRES_IN: Joi.string().default('1h'),
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+
+// ✅ Inject config values with type safety
+@Injectable()
+export class AuthService {
+  constructor(private readonly config: ConfigService) {}
+
+  private get jwtSecret(): string {
+    return this.config.getOrThrow<string>('JWT_SECRET')
+  }
+}
+```
+
+## Testing
+```typescript
+// ✅ Unit test with mocked dependencies
+describe('UsersService', () => {
+  let service: UsersService
+  let repo: jest.Mocked<UsersRepository>
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: UsersRepository, useValue: { findById: jest.fn(), save: jest.fn() } },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+      ],
+    }).compile()
+
+    service = module.get(UsersService)
+    repo = module.get(UsersRepository)
+  })
+
+  it('throws NotFoundException when user does not exist', async () => {
+    repo.findById.mockResolvedValue(null)
+    await expect(service.findOneOrFail('unknown-id')).rejects.toThrow(NotFoundException)
+  })
+})
+
+// ✅ E2E test with full application context
+describe('UsersController (e2e)', () => {
+  let app: INestApplication
+
+  beforeAll(async () => {
+    const module = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = module.createNestApplication()
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
+    await app.init()
+  })
+
+  afterAll(() => app.close())
+
+  it('POST /users returns 201 with created user', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/users')
+      .send({ email: 'test@example.com', password: 'Password123!' })
+      .expect(201)
+
+    expect(res.body.data.email).toBe('test@example.com')
+    expect(res.body.data).not.toHaveProperty('password')
+  })
+})
+```
+
+## Key Rules
+- Register `ValidationPipe({ whitelist: true, transform: true })` globally — strip unknown properties and auto-cast types
+- Use `plainToInstance` with `excludeExtraneousValues: true` to map entities to response DTOs; never return raw ORM entities
+- Throw NestJS built-in exceptions (`NotFoundException`, `ConflictException`, etc.) from services — the global filter handles the HTTP shape
+- Keep controllers thin: routing, parameter extraction, and delegation only — no business logic
+- Use `ConfigService.getOrThrow` instead of `process.env` direct access inside providers
