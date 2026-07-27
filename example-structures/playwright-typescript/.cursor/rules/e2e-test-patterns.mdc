@@ -1,0 +1,252 @@
+---
+description: Playwright TypeScript E2E testing — semantic locators, Page Object Model, fixtures, API testing, and visual assertions
+globs: **/*.spec.ts,**/*.test.ts,**/tests/**/*.ts,**/e2e/**/*.ts,playwright.config.*
+alwaysApply: false
+---
+# Playwright TypeScript E2E Excellence
+
+## Semantic Locator Strategy
+
+- **Prefer role-based locators** over CSS/XPath — they survive markup changes and reflect ARIA semantics
+- Use `getByRole`, `getByLabel`, `getByPlaceholder`, `getByText`, `getByTestId` in that priority order
+- Reserve `locator('css')` / `locator('xpath')` only when semantic options are unavailable
+
+```typescript
+// ✅ Semantic, resilient locators
+const submitBtn = page.getByRole('button', { name: 'Submit Order' })
+const emailInput = page.getByLabel('Email address')
+const heading = page.getByRole('heading', { name: 'Checkout', level: 2 })
+const errorMsg = page.getByRole('alert')
+
+// ✅ Chained locators to narrow context
+const productCard = page.getByTestId('product-card').filter({ hasText: 'Running Shoes' })
+const addBtn = productCard.getByRole('button', { name: 'Add to cart' })
+
+// ❌ Avoid brittle CSS class selectors
+const bad = page.locator('.btn-primary.checkout-submit-v2')
+```
+
+## Page Object Model
+
+```typescript
+// pages/checkout.page.ts
+import { type Page, type Locator, expect } from '@playwright/test'
+
+export class CheckoutPage {
+  readonly page: Page
+  readonly emailInput: Locator
+  readonly passwordInput: Locator
+  readonly submitButton: Locator
+  readonly errorAlert: Locator
+
+  constructor(page: Page) {
+    this.page = page
+    this.emailInput = page.getByLabel('Email address')
+    this.passwordInput = page.getByLabel('Password')
+    this.submitButton = page.getByRole('button', { name: 'Place Order' })
+    this.errorAlert = page.getByRole('alert')
+  }
+
+  async goto() {
+    await this.page.goto('/checkout')
+  }
+
+  async fillShipping(details: { name: string; address: string; city: string }) {
+    await this.page.getByLabel('Full name').fill(details.name)
+    await this.page.getByLabel('Street address').fill(details.address)
+    await this.page.getByLabel('City').fill(details.city)
+  }
+
+  async placeOrder() {
+    await this.submitButton.click()
+    // Playwright auto-waits — no explicit waits needed here
+  }
+
+  async expectOrderConfirmed() {
+    await expect(this.page.getByRole('heading', { name: 'Order confirmed' })).toBeVisible()
+    await expect(this.page.getByTestId('order-number')).toContainText(/ORD-\d+/)
+  }
+}
+```
+
+## Test Fixtures for Auth State Reuse
+
+```typescript
+// fixtures/auth.fixture.ts
+import { test as base, type BrowserContext } from '@playwright/test'
+import { CheckoutPage } from '../pages/checkout.page'
+
+type AuthFixtures = {
+  authenticatedContext: BrowserContext
+  checkoutPage: CheckoutPage
+}
+
+export const test = base.extend<AuthFixtures>({
+  // Reuse signed-in state from storageState — no login on every test
+  authenticatedContext: async ({ browser }, use) => {
+    const context = await browser.newContext({
+      storageState: 'playwright/.auth/user.json',
+    })
+    await use(context)
+    await context.close()
+  },
+
+  checkoutPage: async ({ authenticatedContext }, use) => {
+    const page = await authenticatedContext.newPage()
+    const checkout = new CheckoutPage(page)
+    await use(checkout)
+    await page.close()
+  },
+})
+
+export { expect } from '@playwright/test'
+```
+
+```typescript
+// auth.setup.ts — run once before the test suite
+import { test as setup } from '@playwright/test'
+
+setup('authenticate', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(process.env.TEST_USER_EMAIL!)
+  await page.getByLabel('Password').fill(process.env.TEST_USER_PASSWORD!)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL('/dashboard')
+  await page.context().storageState({ path: 'playwright/.auth/user.json' })
+})
+```
+
+## Assertions
+
+```typescript
+import { expect } from '@playwright/test'
+
+// ✅ Web-first assertions — auto-retry until timeout
+await expect(page.getByRole('status')).toHaveText('Saved')
+await expect(page.getByRole('progressbar')).not.toBeVisible()
+await expect(page.getByTestId('cart-count')).toContainText('3')
+
+// ✅ Soft assertions — collect all failures before throwing
+await expect.soft(page.getByRole('heading')).toHaveText('Summary')
+await expect.soft(page.getByTestId('total')).toHaveText('$129.00')
+// test continues; failures reported together at the end
+
+// ✅ Network response assertion
+const [response] = await Promise.all([
+  page.waitForResponse((res) => res.url().includes('/api/orders') && res.status() === 201),
+  checkoutPage.placeOrder(),
+])
+expect(response.ok()).toBeTruthy()
+```
+
+## API Testing with Playwright
+
+```typescript
+import { test, expect } from '@playwright/test'
+
+test('create order via API', async ({ request }) => {
+  const response = await request.post('/api/orders', {
+    data: {
+      productId: 'prod-123',
+      quantity: 2,
+      shippingAddress: { city: 'Berlin', country: 'DE' },
+    },
+    headers: { Authorization: `Bearer ${process.env.API_TOKEN}` },
+  })
+
+  expect(response.status()).toBe(201)
+
+  const order = await response.json()
+  expect(order).toMatchObject({
+    id: expect.stringMatching(/^ord-/),
+    status: 'pending',
+    total: expect.any(Number),
+  })
+})
+
+// ✅ Seed data via API, then verify in browser
+test('order appears in history after creation', async ({ page, request }) => {
+  const { id } = await (await request.post('/api/orders', { data: { productId: 'prod-456' } })).json()
+
+  await page.goto('/orders')
+  await expect(page.getByText(id)).toBeVisible()
+})
+```
+
+## Playwright Config
+
+```typescript
+// playwright.config.ts
+import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './tests',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 4 : undefined,
+  reporter: [['html'], ['junit', { outputFile: 'results.xml' }]],
+
+  use: {
+    baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+
+  projects: [
+    // Auth setup runs first, once
+    { name: 'setup', testMatch: /.*\.setup\.ts/ },
+
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], storageState: 'playwright/.auth/user.json' },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 14'], storageState: 'playwright/.auth/user.json' },
+      dependencies: ['setup'],
+    },
+  ],
+})
+```
+
+## Test Organization
+
+```typescript
+// tests/checkout.spec.ts
+import { test, expect } from '../fixtures/auth.fixture'
+import type { CheckoutPage } from '../pages/checkout.page'
+
+test.describe('Checkout flow', () => {
+  test.beforeEach(async ({ checkoutPage }) => {
+    await checkoutPage.goto()
+  })
+
+  test('completes purchase with valid details', async ({ checkoutPage }) => {
+    await checkoutPage.fillShipping({
+      name: 'Jane Smith',
+      address: '42 Example St',
+      city: 'Berlin',
+    })
+    await checkoutPage.placeOrder()
+    await checkoutPage.expectOrderConfirmed()
+  })
+
+  test('shows validation error for empty form', async ({ checkoutPage }) => {
+    await checkoutPage.placeOrder()
+    await expect(checkoutPage.errorAlert).toBeVisible()
+    await expect(checkoutPage.errorAlert).toContainText('required fields')
+  })
+
+  // ✅ Tag tests for selective CI runs
+  test('sends confirmation email @smoke', async ({ checkoutPage, request }) => {
+    await checkoutPage.fillShipping({ name: 'Test', address: '1 St', city: 'Berlin' })
+    await checkoutPage.placeOrder()
+
+    const emails = await (await request.get('/api/test/mailbox')).json()
+    expect(emails[0].subject).toContain('Order confirmed')
+  })
+})
+```
