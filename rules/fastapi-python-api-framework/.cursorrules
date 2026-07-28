@@ -1,0 +1,100 @@
+# Project: FastAPI Python API Framework
+
+## Framework Structure
+- Organize project with separate routers, schemas, models, and services directories
+- Use `APIRouter` to group related endpoints by resource (e.g., `routers/users.py`, `routers/items.py`)
+- Define Pydantic schemas in a dedicated `schemas/` package separate from ORM models
+- Keep business logic in a `services/` or `crud/` layer; avoid logic in route handlers
+- Use `app/main.py` as the entry point; register routers and middleware there
+
+## Coding Standards
+- Follow PEP 8 and use Black for code formatting with a line length of 88
+- Enforce type hints on all function signatures, including route handlers
+- Use Ruff for linting; configure it in `pyproject.toml`
+- Name route handler functions descriptively: `get_user`, `create_item`, `delete_order`
+- Prefer `async def` for route handlers that perform I/O; use `def` only for CPU-bound work
+
+## API Design
+- Use plural nouns for resource URLs: `/users`, `/orders`, `/products`
+- Map CRUD operations to proper HTTP methods: GET, POST, PUT/PATCH, DELETE
+- Return appropriate HTTP status codes: 201 for creation, 204 for no-content deletes, 422 for validation errors
+- Version APIs via URL prefix: `/api/v1/`
+- Use `response_model` on every route to control serialized output and auto-generate docs
+
+## Pydantic Models
+- Define separate request and response schemas: `UserCreate`, `UserUpdate`, `UserResponse`
+- Use `model_config = ConfigDict(from_attributes=True)` for ORM integration in response schemas
+- Apply field validators with `@field_validator` for custom validation logic
+- Use `Annotated` with `Field(...)` for metadata, constraints, and examples
+- Avoid returning ORM objects directly from routes; always serialize through a Pydantic schema
+
+## Dependency Injection
+- Use `Depends()` for shared dependencies: database sessions, current user, pagination params
+- Define a `get_db` generator that yields an async session and closes it in a `finally` block
+- Create reusable `Annotated` dependency aliases: `CurrentUser = Annotated[User, Depends(get_current_user)]`
+- Keep dependencies composable; inject higher-level dependencies from lower-level ones
+- Use `Security()` for OAuth2 scoped access control
+
+## Database Integration
+- Use SQLAlchemy 2.x with async support (`AsyncSession`, `async_scoped_session`)
+- Define ORM models in `models/` and run migrations with Alembic
+- Perform all DB calls with `await session.execute(...)` and `await session.commit()`
+- Use `select()`, `insert()`, `update()`, `delete()` from `sqlalchemy` rather than legacy Query API
+- Configure `pool_pre_ping=True` and appropriate pool sizes in the async engine
+
+## Authentication and Security
+- Implement OAuth2 with `OAuth2PasswordBearer` and JWT tokens via `python-jose` or `PyJWT`
+- Hash passwords with `passlib[bcrypt]`; never store plaintext passwords
+- Validate and decode JWT in a `get_current_user` dependency; raise `HTTP 401` on failure
+- Set `HTTPOnly`, `Secure`, and `SameSite` flags on session cookies when applicable
+- Use `python-dotenv` or `pydantic-settings` to manage secrets; never hardcode them
+
+## Error Handling
+- Raise `HTTPException(status_code=..., detail=...)` for expected error conditions
+- Register custom exception handlers with `@app.exception_handler(ExceptionType)` for domain errors
+- Return consistent error response structures with `detail` and optional `errors` fields
+- Validate path and query parameters with type annotations; FastAPI converts 422 automatically
+- Log unexpected exceptions with structured logging before returning a 500 response
+
+## Async Patterns
+- Use `asyncio`-compatible libraries throughout: `httpx` for HTTP, `aiofiles` for file I/O
+- Avoid blocking calls (`time.sleep`, synchronous `requests`) inside `async def` handlers
+- Run CPU-intensive tasks in a thread pool with `asyncio.run_in_executor`
+- Use `asynccontextmanager` lifespan events for startup/shutdown of connections and caches
+- Apply `asyncio.gather()` for concurrent independent I/O operations within a handler
+
+## Testing
+- Use `pytest` with `pytest-asyncio` for async test cases
+- Use `httpx.AsyncClient` with `ASGITransport` for integration tests against the real app
+- Override dependencies in tests with `app.dependency_overrides`
+- Use in-memory SQLite or a test-scoped PostgreSQL container for database tests
+- Aim for 80%+ coverage; test both success paths and error/edge cases
+
+## Performance
+- Enable `response_model_exclude_none=True` to reduce payload size where appropriate
+- Use background tasks (`BackgroundTasks`) for non-blocking post-response work
+- Cache expensive computations with `aiocache` or Redis; cache at the service layer
+- Configure Gunicorn with Uvicorn workers for production: `gunicorn -k uvicorn.workers.UvicornWorker`
+- Profile with `py-spy` or `pyinstrument`; instrument with OpenTelemetry for distributed tracing
+
+## Middleware
+- Add CORS middleware with an explicit `allow_origins` list; avoid `"*"` in production
+- Use `slowapi` or a custom middleware for rate limiting
+- Log request/response cycles with `starlette-prometheus` or a structured logging middleware
+- Apply `GZipMiddleware` for large response compression
+- Order middleware correctly: CORS first, then authentication, then business-logic middleware
+
+## Documentation
+- Use `summary`, `description`, and `tags` parameters on routes for auto-generated OpenAPI docs
+- Provide `openapi_extra` examples on complex request bodies
+- Set `app = FastAPI(title=..., version=..., description=...)` for meaningful API metadata
+- Expose `/docs` (Swagger UI) and `/redoc` only in non-production environments
+- Document environment variables and setup steps in a top-level README
+
+## CI/CD Integration
+- Run `ruff check .`, `black --check .`, and `mypy .` in CI before tests
+- Use Docker multi-stage builds: builder stage installs deps, final stage copies only the app
+- Store secrets in CI secrets manager; inject as environment variables at runtime
+- Pin dependency versions in `requirements.txt` or `pyproject.toml`; use `pip-compile` or Poetry lock files
+
+Remember to leverage FastAPI's automatic data validation, serialization, and OpenAPI generation to keep route handlers thin and business logic testable in isolation.
