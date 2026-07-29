@@ -54,6 +54,22 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### 🐦 NestJS
+```
+nestjs/
+├── .cursor/rules/
+│   ├── api-architecture.mdc          # Modules, controllers, services, DTOs, guards
+│   └── testing-patterns.mdc          # Unit, integration, and E2E tests with Jest + Supertest
+└── src/
+```
+
+**Key Features:**
+- **Module Architecture**: Domain-driven module design with proper exports
+- **Thin Controllers**: Route handling delegated to injectable services
+- **DTO Validation**: `class-validator` decorators with global `ValidationPipe`
+- **Exception Handling**: Domain exceptions + global `AllExceptionsFilter`
+- **Testing Excellence**: Mocked `createTestingModule` for units, Supertest for E2E
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions

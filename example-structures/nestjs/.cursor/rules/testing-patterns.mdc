@@ -1,0 +1,220 @@
+---
+description: NestJS testing patterns — unit tests with Jest, integration tests with supertest, and TestingModule setup
+globs: **/*.spec.ts,**/*.e2e-spec.ts,**/jest.config.*,**/test/**/*.ts
+alwaysApply: false
+---
+# NestJS Testing Excellence
+
+## Testing Layers
+
+| Layer | Tool | Scope |
+|-------|------|-------|
+| Unit | Jest + `createTestingModule` | Single service/guard/pipe in isolation |
+| Integration | Jest + `@nestjs/testing` | Full module with real DB or in-memory substitute |
+| E2E | Jest + Supertest | HTTP request → response through the full app |
+
+## Unit Testing Services
+
+- Use `createTestingModule` to instantiate only the class under test
+- Mock every dependency with `{ provide: Token, useValue: mockObject }`
+- Reset mocks in `beforeEach` to prevent state leakage between tests
+
+```typescript
+// ✅ users.service.spec.ts
+import { Test, TestingModule } from '@nestjs/testing'
+import { getRepositoryToken } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
+import { ConflictException, NotFoundException } from '@nestjs/common'
+import { UsersService } from './users.service'
+import { User } from './entities/user.entity'
+
+const mockUser: User = {
+  id: 'uuid-1',
+  email: 'alice@example.com',
+  password: 'hashed',
+  displayName: 'Alice',
+}
+
+describe('UsersService', () => {
+  let service: UsersService
+  let repo: jest.Mocked<Pick<Repository<User>, 'findOneBy' | 'find' | 'create' | 'save' | 'remove'>>
+
+  beforeEach(async () => {
+    repo = {
+      findOneBy: jest.fn(),
+      find: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    }
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: getRepositoryToken(User), useValue: repo },
+      ],
+    }).compile()
+
+    service = module.get(UsersService)
+  })
+
+  describe('create', () => {
+    it('returns the saved user when email is unique', async () => {
+      repo.findOneBy.mockResolvedValue(null)
+      repo.create.mockReturnValue(mockUser)
+      repo.save.mockResolvedValue(mockUser)
+
+      const result = await service.create({ email: mockUser.email, password: '12345678' })
+
+      expect(result).toEqual(mockUser)
+      expect(repo.save).toHaveBeenCalledWith(mockUser)
+    })
+
+    it('throws ConflictException when email already exists', async () => {
+      repo.findOneBy.mockResolvedValue(mockUser)
+
+      await expect(
+        service.create({ email: mockUser.email, password: '12345678' }),
+      ).rejects.toThrow(ConflictException)
+    })
+  })
+
+  describe('findOneOrFail', () => {
+    it('returns the user when found', async () => {
+      repo.findOneBy.mockResolvedValue(mockUser)
+      await expect(service.findOneOrFail('uuid-1')).resolves.toEqual(mockUser)
+    })
+
+    it('throws NotFoundException when user does not exist', async () => {
+      repo.findOneBy.mockResolvedValue(null)
+      await expect(service.findOneOrFail('uuid-999')).rejects.toThrow(NotFoundException)
+    })
+  })
+})
+```
+
+## Unit Testing Controllers
+
+- Mock the service and assert that the controller calls the right service method with the right args
+- Do not test HTTP status codes or headers in unit tests — that belongs in E2E tests
+
+```typescript
+// ✅ users.controller.spec.ts
+import { Test } from '@nestjs/testing'
+import { UsersController } from './users.controller'
+import { UsersService } from './users.service'
+
+describe('UsersController', () => {
+  let controller: UsersController
+  let service: jest.Mocked<UsersService>
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      controllers: [UsersController],
+      providers: [
+        {
+          provide: UsersService,
+          useValue: {
+            create: jest.fn(),
+            findAll: jest.fn(),
+            findOneOrFail: jest.fn(),
+            update: jest.fn(),
+            remove: jest.fn(),
+          },
+        },
+      ],
+    }).compile()
+
+    controller = module.get(UsersController)
+    service = module.get(UsersService) as jest.Mocked<UsersService>
+  })
+
+  it('delegates creation to the service', async () => {
+    const dto = { email: 'alice@example.com', password: '12345678' }
+    const created = { id: 'uuid-1', ...dto, displayName: null }
+    service.create.mockResolvedValue(created as any)
+
+    const result = await controller.create(dto)
+
+    expect(service.create).toHaveBeenCalledWith(dto)
+    expect(result).toEqual(created)
+  })
+})
+```
+
+## E2E Testing with Supertest
+
+- Bootstrap the full `AppModule` once per suite using `beforeAll`; close the app in `afterAll`
+- Use a dedicated test database (SQLite in-memory or a Docker container) to avoid polluting production data
+- Seed and clear data in `beforeEach` so tests remain independent
+
+```typescript
+// ✅ test/users.e2e-spec.ts
+import { Test, TestingModule } from '@nestjs/testing'
+import { INestApplication, ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common'
+import { Reflector } from '@nestjs/core'
+import * as request from 'supertest'
+import { AppModule } from '../src/app.module'
+
+describe('UsersController (e2e)', () => {
+  let app: INestApplication
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile()
+
+    app = moduleFixture.createNestApplication()
+
+    // Mirror the global setup from main.ts
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    )
+    app.useGlobalInterceptors(
+      new ClassSerializerInterceptor(app.get(Reflector)),
+    )
+
+    await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  it('POST /users → 201 with created user', async () => {
+    const dto = { email: 'e2e@example.com', password: 'supersecret' }
+
+    const { body, status } = await request(app.getHttpServer())
+      .post('/users')
+      .send(dto)
+
+    expect(status).toBe(201)
+    expect(body).toMatchObject({ email: dto.email })
+    expect(body).not.toHaveProperty('password')  // @Exclude() on entity
+  })
+
+  it('POST /users → 409 on duplicate email', async () => {
+    const dto = { email: 'e2e@example.com', password: 'supersecret' }
+
+    await request(app.getHttpServer()).post('/users').send(dto)
+    const { status } = await request(app.getHttpServer()).post('/users').send(dto)
+
+    expect(status).toBe(409)
+  })
+
+  it('GET /users/:id → 404 for unknown id', async () => {
+    const { status } = await request(app.getHttpServer())
+      .get('/users/00000000-0000-0000-0000-000000000000')
+
+    expect(status).toBe(404)
+  })
+})
+```
+
+## Key Rules
+
+- Always call `app.close()` in `afterAll` to prevent open handle warnings from Jest
+- Mirror `main.ts` global pipes/interceptors inside the test bootstrap so validation behaves identically
+- Prefer `jest.Mocked<SomeService>` over casting to `any` for proper type-checking in mocks
+- Test service methods directly in unit tests and HTTP layer behavior (status codes, headers) in E2E tests — don't mix concerns
+- Use `jest.config.ts` with separate projects for unit and E2E tests to control execution independently

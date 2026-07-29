@@ -1,0 +1,302 @@
+---
+description: NestJS API architecture — modules, controllers, services, DTOs, guards, and exception handling
+globs: **/*.module.ts,**/*.controller.ts,**/*.service.ts,**/*.dto.ts,**/*.guard.ts,**/*.interceptor.ts,**/*.pipe.ts,**/main.ts
+alwaysApply: false
+---
+# NestJS API Architecture Excellence
+
+## Project Structure
+
+```
+src/
+├── main.ts                     # Bootstrap — global pipes, guards, interceptors
+├── app.module.ts               # Root module
+├── common/
+│   ├── decorators/             # Custom parameter and class decorators
+│   ├── filters/                # Exception filters
+│   ├── guards/                 # Authentication / authorization guards
+│   ├── interceptors/           # Logging, transform, caching interceptors
+│   └── pipes/                  # Validation and transformation pipes
+└── modules/
+    └── users/
+        ├── users.module.ts
+        ├── users.controller.ts
+        ├── users.service.ts
+        ├── users.repository.ts
+        ├── dto/
+        │   ├── create-user.dto.ts
+        │   └── update-user.dto.ts
+        └── entities/
+            └── user.entity.ts
+```
+
+## Module Design
+
+- **One module per domain** — do not mix unrelated concerns in a single module
+- Provide everything the module needs internally; export only what other modules must use
+- Use `forRoot` / `forRootAsync` for dynamic, config-driven modules
+
+```typescript
+// ✅ users.module.ts
+import { Module } from '@nestjs/common'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { UsersController } from './users.controller'
+import { UsersService } from './users.service'
+import { User } from './entities/user.entity'
+
+@Module({
+  imports: [TypeOrmModule.forFeature([User])],
+  controllers: [UsersController],
+  providers: [UsersService],
+  exports: [UsersService],  // export only what other modules need
+})
+export class UsersModule {}
+```
+
+## Controllers
+
+- Keep controllers thin — delegate all business logic to services
+- Use route-level guards and interceptors via decorators, not inside method bodies
+- Return plain objects/entities; let a global `ClassSerializerInterceptor` handle serialization
+
+```typescript
+// ✅ users.controller.ts
+import {
+  Controller, Get, Post, Body, Patch, Param, Delete,
+  ParseUUIDPipe, HttpCode, HttpStatus, UseGuards,
+} from '@nestjs/common'
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard'
+import { UsersService } from './users.service'
+import { CreateUserDto } from './dto/create-user.dto'
+import { UpdateUserDto } from './dto/update-user.dto'
+
+@ApiTags('users')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto)
+  }
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll()
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.findOneOrFail(id)
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.update(id, updateUserDto)
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.remove(id)
+  }
+}
+```
+
+## Services
+
+- Contain all business rules; never import `Request` or HTTP concerns
+- Throw domain exceptions (`NotFoundException`, `ConflictException`) — let the global filter handle HTTP mapping
+- Inject repositories or other services; never instantiate them directly
+
+```typescript
+// ✅ users.service.ts
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
+import { User } from './entities/user.entity'
+import { CreateUserDto } from './dto/create-user.dto'
+import { UpdateUserDto } from './dto/update-user.dto'
+
+@Injectable()
+export class UsersService {
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
+
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    const exists = await this.userRepository.findOneBy({ email: createUserDto.email })
+    if (exists) {
+      throw new ConflictException(`Email ${createUserDto.email} is already in use`)
+    }
+
+    const user = this.userRepository.create(createUserDto)
+    return this.userRepository.save(user)
+  }
+
+  findAll(): Promise<User[]> {
+    return this.userRepository.find()
+  }
+
+  async findOneOrFail(id: string): Promise<User> {
+    const user = await this.userRepository.findOneBy({ id })
+    if (!user) {
+      throw new NotFoundException(`User ${id} not found`)
+    }
+    return user
+  }
+
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    const user = await this.findOneOrFail(id)
+    Object.assign(user, updateUserDto)
+    return this.userRepository.save(user)
+  }
+
+  async remove(id: string): Promise<void> {
+    const user = await this.findOneOrFail(id)
+    await this.userRepository.remove(user)
+  }
+}
+```
+
+## DTOs and Validation
+
+- Use `class-validator` decorators on DTOs — never validate manually inside controllers or services
+- Use `PartialType(CreateUserDto)` for update DTOs to avoid duplicating field rules
+- Enable `whitelist: true` on the global `ValidationPipe` to strip unknown properties
+
+```typescript
+// ✅ create-user.dto.ts
+import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+
+export class CreateUserDto {
+  @ApiProperty({ example: 'alice@example.com' })
+  @IsEmail()
+  email: string
+
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  password: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  displayName?: string
+}
+
+// ✅ update-user.dto.ts
+import { PartialType } from '@nestjs/swagger'
+import { CreateUserDto } from './create-user.dto'
+
+export class UpdateUserDto extends PartialType(CreateUserDto) {}
+```
+
+```typescript
+// ✅ main.ts — global pipes and serialization
+import { NestFactory, Reflector } from '@nestjs/core'
+import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common'
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import { AppModule } from './app.module'
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule)
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,        // strip properties not in DTO
+      forbidNonWhitelisted: true,
+      transform: true,        // auto-transform payloads to DTO instances
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
+
+  app.useGlobalInterceptors(
+    new ClassSerializerInterceptor(app.get(Reflector)),
+  )
+
+  const config = new DocumentBuilder()
+    .setTitle('API')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build()
+  SwaggerModule.setup('api', app, SwaggerModule.createDocument(app, config))
+
+  await app.listen(process.env.PORT ?? 3000)
+}
+bootstrap()
+```
+
+## Exception Handling
+
+- Use built-in HTTP exceptions (`NotFoundException`, `BadRequestException`, etc.) for standard cases
+- Create a global `AllExceptionsFilter` only when you need custom logging or non-standard error shapes
+
+```typescript
+// ✅ common/filters/all-exceptions.filter.ts
+import {
+  ExceptionFilter, Catch, ArgumentsHost,
+  HttpException, HttpStatus, Logger,
+} from '@nestjs/common'
+import { Request, Response } from 'express'
+
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name)
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp()
+    const response = ctx.getResponse<Response>()
+    const request = ctx.getRequest<Request>()
+
+    const status =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR
+
+    const message =
+      exception instanceof HttpException
+        ? exception.getResponse()
+        : 'Internal server error'
+
+    if (status >= 500) {
+      this.logger.error(exception)
+    }
+
+    response.status(status).json({
+      statusCode: status,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      message,
+    })
+  }
+}
+```
+
+## Guards
+
+```typescript
+// ✅ common/guards/jwt-auth.guard.ts
+import { Injectable } from '@nestjs/common'
+import { AuthGuard } from '@nestjs/passport'
+
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {}
+```
+
+## Key Rules
+
+- Never import `HttpException` or Express types inside service files — services are transport-agnostic
+- Register global providers (`ValidationPipe`, `ClassSerializerInterceptor`, `AllExceptionsFilter`) in `main.ts`, not in `AppModule` providers, so they always take effect
+- Use `@Exclude()` from `class-transformer` on entity fields (e.g. `password`) rather than manually deleting them in services
+- Prefer constructor injection over property injection for testability
+- Use `ConfigModule.forRoot({ isGlobal: true })` so config is available everywhere without re-importing
