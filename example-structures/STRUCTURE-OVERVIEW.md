@@ -54,6 +54,20 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### 🔺 Next.js App Router
+```
+next-js/
+├── .cursor/rules/
+│   └── app-router-patterns.mdc       # App Router, Server Components, Server Actions
+└── app/
+```
+
+**Key Features:**
+- **Server vs Client Components**: Clear boundaries, data-fetching patterns
+- **App Router Conventions**: Layouts, loading/error boundaries, route handlers
+- **Server Actions**: Form mutations, `useActionState`, `revalidatePath`
+- **Metadata API**: Static and dynamic SEO metadata with `generateMetadata`
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions
@@ -127,7 +141,7 @@ globs: **/*.cy.js,**/*.cy.ts,**/cypress/**/*.js
 ## 🎉 Getting Started
 
 ### Quick Setup
-1. **Choose Framework**: Select from Selenium Python, Cypress, or React TypeScript
+1. **Choose Framework**: Select from Selenium Python, Cypress, React TypeScript, or Next.js
 2. **Copy Rules**: Copy `.mdc` files to your project's `.cursor/rules/` directory
 3. **Customize**: Adjust glob patterns and examples to match your project structure
 4. **Iterate**: Refine rules based on team feedback and project needs
