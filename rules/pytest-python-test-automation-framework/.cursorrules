@@ -1,0 +1,93 @@
+# Project: pytest Python Test Automation Framework
+
+## Framework Structure
+- Use pytest as the primary test runner for Python projects
+- Organize tests in a dedicated `tests/` directory mirroring the source layout
+- Use `conftest.py` files for shared fixtures and hooks at each directory level
+- Separate unit, integration, and end-to-end tests into distinct sub-directories
+
+## Coding Standards
+- Follow PEP 8 and use type hints throughout test code
+- Use descriptive test function names that express intent: `test_user_login_with_valid_credentials`
+- Keep test functions focused on a single behavior
+- Limit nesting inside test functions; prefer fixture composition over setup blocks
+
+## Test Organization
+- Prefix all test files with `test_` and all test functions/classes with `test_`
+- Group related tests inside `TestClass` only when shared state or fixtures justify it
+- Use `pytest.mark` for categorizing tests (e.g., `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`)
+- Register custom marks in `pytest.ini` or `pyproject.toml` to avoid warnings
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern in every test
+- Keep each test independent; never rely on execution order
+- Prefer explicit assertions with descriptive failure messages
+- Avoid logic (loops, conditionals) inside tests; move complexity to helpers or fixtures
+
+## Fixtures
+- Define fixtures in `conftest.py` for cross-module sharing
+- Use the appropriate fixture scope: `function` (default), `class`, `module`, `session`
+- Implement teardown via `yield` in fixtures, not `return`
+- Prefer dependency injection through fixture parameters over global state
+
+## Mocking and Patching
+- Use `pytest-mock` (the `mocker` fixture) for mocking instead of `unittest.mock` directly
+- Patch at the point of use, not at the definition
+- Use `mocker.patch.object` for patching specific attributes on real objects
+- Use `responses` or `httpretty` libraries for mocking HTTP requests in integration tests
+
+## Parametrization
+- Use `@pytest.mark.parametrize` to cover multiple input/output cases without duplicating tests
+- Provide `ids` for parametrize to make test output readable
+- Combine parametrization with fixtures for data-driven testing scenarios
+- Extract large parameter sets into module-level constants or external files
+
+## Assertions
+- Use plain `assert` statements; rely on pytest's assertion introspection for clear failure output
+- Import `pytest.approx` for floating-point comparisons
+- Use `pytest.raises` as a context manager to assert expected exceptions
+- Use `pytest.warns` to assert expected warnings
+
+## Coverage
+- Integrate `pytest-cov` for coverage measurement (`pytest --cov=src --cov-report=html`)
+- Set minimum coverage thresholds in `pyproject.toml` (`[tool.coverage.report] fail_under = 80`)
+- Exclude generated files, migrations, and non-testable boilerplate from coverage
+- Track branch coverage in addition to line coverage
+
+## Performance
+- Mark slow tests with `@pytest.mark.slow` and exclude them from default runs
+- Use `pytest-xdist` for parallel test execution (`-n auto`)
+- Minimise I/O and network calls in unit tests; stub or mock external dependencies
+- Use `session`-scoped fixtures for expensive setup shared across all tests
+
+## Test Data Management
+- Use `factory_boy` or `pytest-factoryboy` for generating test model instances
+- Store static fixtures in `tests/fixtures/` as JSON/YAML files and load them via fixtures
+- Use `Faker` for generating realistic but random test data
+- Never commit real credentials or PII in test data files
+
+## Configuration
+- Configure pytest in `pyproject.toml` under `[tool.pytest.ini_options]`
+- Set `testpaths`, `python_files`, `python_classes`, and `python_functions` explicitly
+- Use `addopts` for default flags (e.g., `-v --strict-markers`)
+- Manage environment variables with `pytest-dotenv` or `monkeypatch.setenv`
+
+## CI/CD Integration
+- Output JUnit XML reports for CI pipelines (`--junitxml=reports/junit.xml`)
+- Run the full suite on pull requests; run only fast tests on every commit using markers
+- Cache the `.pytest_cache` directory across CI runs for faster reruns
+- Fail the pipeline if coverage drops below the defined threshold
+
+## Error Handling
+- Test both the happy path and error/edge-case paths for every public function
+- Assert on specific exception types and messages, not just that an exception was raised
+- Use `pytest.raises(ExceptionType, match=r"pattern")` for precise exception matching
+- Test boundary conditions explicitly (empty inputs, None, max values)
+
+## Documentation
+- Write a short docstring on complex test functions explaining *why*, not *what*
+- Maintain a `tests/README.md` describing how to run tests, required environment variables, and marker conventions
+- Document custom fixtures and their expected return types in `conftest.py`
+- Include example commands for common test scenarios in the project README
+
+Remember to keep the test suite fast, deterministic, and easy to run locally with a single `pytest` command.
