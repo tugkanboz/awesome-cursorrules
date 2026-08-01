@@ -39,7 +39,8 @@ awesome-cursorrules/
 │   ├── cypress/                    # testing-fundamentals, api-testing
 │   ├── next-js/                    # app-router-patterns
 │   ├── react-typescript/           # component-development
-│   └── selenium-python/            # architecture, page-objects, test-patterns
+│   ├── selenium-python/            # architecture, page-objects, test-patterns
+│   └── tailwind-css/               # utility-first-patterns
 └── 📖 legacy-migration/            # Before/after migration guides
 ```
 

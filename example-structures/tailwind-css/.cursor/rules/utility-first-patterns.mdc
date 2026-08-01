@@ -1,0 +1,275 @@
+---
+description: Tailwind CSS utility-first patterns — responsive design, dark mode, component extraction, and config customization
+globs: **/*.tsx,**/*.jsx,**/*.html,**/*.vue,**/tailwind.config.*
+alwaysApply: false
+---
+# Tailwind CSS Utility-First Excellence
+
+## Core Utility-First Philosophy
+
+- **Compose utilities directly in markup** — avoid custom CSS unless using `@apply` for repeated patterns
+- **Mobile-first breakpoints** — unprefixed utilities apply to all sizes; prefix with `sm:`, `md:`, `lg:`, `xl:`, `2xl:` to override upward
+- **Extract components, not utilities** — when the same utility group repeats 3+ times, extract a component, not a CSS class
+- **No premature abstraction** — resist moving utilities to `@apply` until duplication is proven
+
+```tsx
+// ✅ Compose utilities directly
+<button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+  Save changes
+</button>
+
+// ❌ Avoid inventing CSS class names for one-off styles
+// .my-special-button { @apply rounded-lg bg-blue-600 ... }
+```
+
+## Responsive Design Patterns
+
+```tsx
+// ✅ Mobile-first: base → sm → md → lg → xl
+<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+  {items.map((item) => (
+    <Card key={item.id} {...item} />
+  ))}
+</div>
+
+// ✅ Responsive typography
+<h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+  Page heading
+</h1>
+
+// ✅ Responsive visibility
+<nav className="hidden lg:flex lg:gap-x-6">
+  {/* Desktop nav — hidden below lg */}
+</nav>
+<button className="lg:hidden" aria-label="Open menu">
+  {/* Mobile hamburger — hidden at lg and above */}
+</button>
+
+// ✅ Responsive spacing and layout
+<aside className="w-full lg:w-64 lg:shrink-0">
+  Sidebar
+</aside>
+<main className="min-w-0 flex-1">
+  Content
+</main>
+```
+
+## Dark Mode
+
+Configure `darkMode: 'class'` in `tailwind.config.ts` to toggle dark mode via a CSS class on `<html>`.
+
+```tsx
+// ✅ Pair light and dark utilities with dark: prefix
+<div className="bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+  <h2 className="text-gray-800 dark:text-gray-200">Heading</h2>
+  <p className="text-gray-600 dark:text-gray-400">Body text</p>
+</div>
+
+// ✅ Dark mode borders and shadows
+<div className="rounded-xl border border-gray-200 shadow-sm dark:border-gray-700 dark:shadow-gray-900/50">
+  Card content
+</div>
+
+// ✅ Dark mode interactive states
+<button className="bg-indigo-600 text-white hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400">
+  Action
+</button>
+```
+
+## Component Extraction with @apply
+
+Use `@apply` only when a utility group is truly reused across unrelated files and a React/Vue component isn't the right abstraction (e.g., prose styles, base form inputs reset).
+
+```css
+/* ✅ Base input reset — shared across many unrelated forms */
+@layer components {
+  .input-base {
+    @apply w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm
+           placeholder-gray-400 shadow-sm
+           focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500
+           dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600
+           px-4 py-2 text-sm font-semibold text-white shadow-sm
+           hover:bg-indigo-500
+           focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}
+```
+
+```tsx
+{/* ✅ Use the abstracted classes */}
+<input type="email" className="input-base" placeholder="you@example.com" />
+<button className="btn-primary" disabled={loading}>
+  {loading ? 'Saving…' : 'Save'}
+</button>
+```
+
+## Arbitrary Values
+
+Use `[]` syntax for one-off values that fall outside the design scale.
+
+```tsx
+// ✅ Arbitrary pixel/rem values when design requires exact spec
+<div className="h-[560px] w-[calc(100%-2rem)]">
+  Hero section
+</div>
+
+// ✅ Arbitrary colors (prefer extending config for repeated colors)
+<span className="text-[#E63946]">Warning text</span>
+
+// ✅ Arbitrary grid template
+<div className="grid grid-cols-[1fr_2fr_1fr] gap-6">
+  <aside />
+  <main />
+  <aside />
+</div>
+
+// ✅ Arbitrary CSS properties via []
+<div className="[mask-image:linear-gradient(to_bottom,black,transparent)]">
+  Fade out content
+</div>
+```
+
+## Tailwind Config Customization
+
+Extend the default theme — never replace it — to add brand tokens while keeping all Tailwind defaults available.
+
+```typescript
+// ✅ tailwind.config.ts
+import type { Config } from 'tailwindcss'
+
+const config: Config = {
+  content: ['./src/**/*.{ts,tsx,js,jsx,html}'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#eff6ff',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          900: '#1e3a5f',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter var', 'ui-sans-serif', 'system-ui'],
+        mono: ['JetBrains Mono', 'ui-monospace'],
+      },
+      borderRadius: {
+        '4xl': '2rem',
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.2s ease-in-out',
+        'slide-up': 'slideUp 0.3s ease-out',
+      },
+      keyframes: {
+        fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },
+        slideUp: { from: { transform: 'translateY(8px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
+      },
+    },
+  },
+  plugins: [
+    require('@tailwindcss/forms'),
+    require('@tailwindcss/typography'),
+  ],
+}
+
+export default config
+```
+
+## State and Group Variants
+
+```tsx
+// ✅ group — style children based on parent hover/focus
+<a href="#" className="group flex items-center gap-3 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-gray-800">
+  <span className="text-gray-400 group-hover:text-indigo-600">
+    <Icon />
+  </span>
+  <span className="font-medium text-gray-700 group-hover:text-gray-900 dark:text-gray-300">
+    Dashboard
+  </span>
+</a>
+
+// ✅ peer — style siblings based on sibling state (e.g. floating label)
+<div className="relative">
+  <input
+    id="email"
+    type="email"
+    placeholder=" "
+    className="peer block w-full rounded-md border border-gray-300 px-3 pb-2 pt-5 text-sm
+               focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+  />
+  <label
+    htmlFor="email"
+    className="absolute left-3 top-2 text-xs text-gray-500 transition-all
+               peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm
+               peer-focus:top-2 peer-focus:text-xs peer-focus:text-indigo-600"
+  >
+    Email
+  </label>
+</div>
+
+// ✅ has — style parent when child matches (Tailwind v3.4+)
+<label className="flex cursor-pointer gap-2 has-[:checked]:text-indigo-600">
+  <input type="checkbox" className="accent-indigo-600" />
+  Subscribe to newsletter
+</label>
+```
+
+## Common Patterns
+
+```tsx
+// ✅ Centered page container
+<div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+  {children}
+</div>
+
+// ✅ Card with hover lift
+<div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm
+                transition-shadow duration-200 hover:shadow-md
+                dark:border-gray-700 dark:bg-gray-800">
+  Card content
+</div>
+
+// ✅ Badge / pill
+<span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+  Active
+</span>
+
+// ✅ Divider
+<div className="relative my-6">
+  <div className="absolute inset-0 flex items-center" aria-hidden="true">
+    <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+  </div>
+  <div className="relative flex justify-center text-sm">
+    <span className="bg-white px-2 text-gray-500 dark:bg-gray-900">or</span>
+  </div>
+</div>
+```
+
+## Key Rules
+
+- Run `prettier-plugin-tailwindcss` to auto-sort class lists — never sort by hand
+- Avoid mixing Tailwind utilities with global CSS on the same element
+- Use `clsx` or `cva` (class-variance-authority) for conditional and variant-based class composition, not string interpolation
+- Purge is automatic when `content` paths in `tailwind.config.ts` cover all template files — verify the paths if classes go missing in production
+- Do **not** use string interpolation to build class names (`bg-${color}-600`) — Tailwind's scanner is regex-based and won't detect dynamically constructed strings; use a complete-class lookup object instead
+
+```tsx
+// ❌ Dynamic string interpolation — class won't be detected
+<div className={`bg-${status}-600`} />
+
+// ✅ Lookup object — all classes are statically present in source
+const statusClass = {
+  success: 'bg-green-600',
+  error: 'bg-red-600',
+  warning: 'bg-yellow-600',
+} as const
+
+<div className={statusClass[status]} />
+```

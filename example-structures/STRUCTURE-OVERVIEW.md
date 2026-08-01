@@ -54,6 +54,20 @@ react-typescript/
 - **State Management**: Context API with useReducer patterns
 - **Testing Integration**: Comprehensive testing with Testing Library
 
+### 🎨 Tailwind CSS
+```
+tailwind-css/
+├── .cursor/rules/
+│   └── utility-first-patterns.mdc    # Responsive design, dark mode, component extraction
+└── src/
+```
+
+**Key Features:**
+- **Utility-First Approach**: Compose utilities in markup; extract only proven repetitions
+- **Responsive & Dark Mode**: Mobile-first breakpoints and `dark:` variant patterns
+- **State Variants**: `group`, `peer`, and `has-` patterns for interactive UI
+- **Config Customization**: Extending the theme with brand tokens and custom animations
+
 ## 🔄 Migration Benefits
 
 ### Legacy Problems vs Modern Solutions
