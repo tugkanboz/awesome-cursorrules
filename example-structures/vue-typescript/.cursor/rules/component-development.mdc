@@ -1,0 +1,315 @@
+---
+description: Vue 3 + TypeScript component patterns — Composition API, script setup, composables, Pinia state, and Vue Router
+globs: **/*.vue,**/composables/**/*.ts,**/stores/**/*.ts,**/router/**/*.ts
+alwaysApply: false
+---
+# Vue 3 TypeScript Component Excellence
+
+## Composition API with `<script setup>`
+
+- **Always use `<script setup>`**: it is the recommended syntax for Vue 3 SFCs — less boilerplate, better TypeScript inference
+- **TypeScript-first**: use `defineProps`, `defineEmits`, and `defineExpose` generic variants for full type safety
+- **Composables over mixins**: extract shared logic into `use*` functions instead of mixing state into components
+
+```vue
+<!-- ✅ Typed props and emits with <script setup> -->
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+
+interface Props {
+  label: string
+  variant?: 'primary' | 'secondary' | 'outline'
+  size?: 'sm' | 'md' | 'lg'
+  disabled?: boolean
+  loading?: boolean
+}
+
+interface Emits {
+  (e: 'click', event: MouseEvent): void
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  variant: 'primary',
+  size: 'md',
+  disabled: false,
+  loading: false,
+})
+
+const emit = defineEmits<Emits>()
+
+const buttonClasses = computed(() => [
+  'btn',
+  `btn--${props.variant}`,
+  `btn--${props.size}`,
+  { 'btn--disabled': props.disabled, 'btn--loading': props.loading },
+])
+
+function handleClick(event: MouseEvent) {
+  if (props.disabled || props.loading) return
+  emit('click', event)
+}
+</script>
+
+<template>
+  <button
+    :class="buttonClasses"
+    :disabled="disabled || loading"
+    :aria-disabled="disabled || loading"
+    :aria-busy="loading"
+    @click="handleClick"
+  >
+    <span v-if="loading" class="btn__spinner" aria-hidden="true" />
+    <span :class="loading ? 'btn__content--loading' : 'btn__content'">
+      <slot />
+    </span>
+  </button>
+</template>
+```
+
+## Composables
+
+Extract reusable stateful logic into `composables/use*.ts` files. Composables are the Vue 3 equivalent of React custom hooks.
+
+```typescript
+// ✅ composables/useApi.ts
+import { ref, readonly } from 'vue'
+
+interface UseApiOptions<T> {
+  immediate?: boolean
+  onSuccess?: (data: T) => void
+  onError?: (error: Error) => void
+}
+
+export function useApi<T>(
+  apiCall: () => Promise<T>,
+  options: UseApiOptions<T> = {},
+) {
+  const { immediate = false, onSuccess, onError } = options
+
+  const data = ref<T | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+
+  let controller: AbortController | null = null
+
+  async function execute() {
+    controller?.abort()
+    controller = new AbortController()
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const result = await apiCall()
+      if (!controller.signal.aborted) {
+        data.value = result as T
+        onSuccess?.(result)
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        error.value = err instanceof Error ? err : new Error('Unknown error')
+        onError?.(error.value)
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        loading.value = false
+      }
+    }
+  }
+
+  function reset() {
+    controller?.abort()
+    data.value = null
+    error.value = null
+    loading.value = false
+  }
+
+  if (immediate) {
+    execute()
+  }
+
+  return {
+    data: readonly(data),
+    loading: readonly(loading),
+    error: readonly(error),
+    execute,
+    reset,
+  }
+}
+```
+
+## Pinia State Management
+
+Use Pinia for global state. Prefer the **Setup Store** syntax — it mirrors `<script setup>` and gives full TypeScript inference.
+
+```typescript
+// ✅ stores/auth.ts — Setup Store syntax
+import { ref, computed } from 'vue'
+import { defineStore } from 'pinia'
+import { authApi } from '@/api/auth'
+
+interface User {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'user' | 'guest'
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const isAuthenticated = computed(() => user.value !== null)
+  const isAdmin = computed(() => user.value?.role === 'admin')
+
+  async function login(email: string, password: string) {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await authApi.login({ email, password })
+      user.value = response.user
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Login failed'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function logout() {
+    authApi.logout()
+    user.value = null
+    error.value = null
+  }
+
+  function clearError() {
+    error.value = null
+  }
+
+  return { user, loading, error, isAuthenticated, isAdmin, login, logout, clearError }
+})
+```
+
+```vue
+<!-- ✅ Consuming Pinia store in a component -->
+<script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
+import { storeToRefs } from 'pinia'
+
+const auth = useAuthStore()
+// storeToRefs keeps reactivity when destructuring
+const { user, isAuthenticated, loading, error } = storeToRefs(auth)
+</script>
+```
+
+## Vue Router Patterns
+
+```typescript
+// ✅ router/index.ts — typed routes with lazy loading
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: '/',
+      component: () => import('@/layouts/DefaultLayout.vue'),
+      children: [
+        {
+          path: '',
+          name: 'home',
+          component: () => import('@/views/HomeView.vue'),
+        },
+        {
+          path: 'dashboard',
+          name: 'dashboard',
+          component: () => import('@/views/DashboardView.vue'),
+          meta: { requiresAuth: true },
+        },
+      ],
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { guestOnly: true },
+    },
+  ],
+})
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  if (to.meta.guestOnly && auth.isAuthenticated) {
+    return { name: 'home' }
+  }
+})
+
+export default router
+```
+
+```vue
+<!-- ✅ useRoute / useRouter in components -->
+<script setup lang="ts">
+import { useRoute, useRouter } from 'vue-router'
+
+const route = useRoute()
+const router = useRouter()
+
+// Read typed query params
+const page = computed(() => Number(route.query.page ?? 1))
+
+function goToProduct(id: string) {
+  router.push({ name: 'product', params: { id } })
+}
+</script>
+```
+
+## Template Best Practices
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const items = ref<{ id: number; label: string }[]>([])
+const isOpen = ref(false)
+</script>
+
+<template>
+  <!-- ✅ Always use :key with unique ids, not index -->
+  <ul>
+    <li v-for="item in items" :key="item.id">{{ item.label }}</li>
+  </ul>
+
+  <!-- ✅ v-show for frequent toggles, v-if for conditional mounting -->
+  <Sidebar v-show="isOpen" />
+  <HeavyComponent v-if="shouldRender" />
+
+  <!-- ✅ Async component with Suspense for code-split boundaries -->
+  <Suspense>
+    <template #default>
+      <AsyncDashboard />
+    </template>
+    <template #fallback>
+      <DashboardSkeleton />
+    </template>
+  </Suspense>
+</template>
+```
+
+## Key Rules
+
+- Import Vue APIs (`ref`, `computed`, `watch`, etc.) from `'vue'` — never use Options API mixins
+- Expose reactive state as `readonly()` from composables to prevent external mutation
+- Use `storeToRefs()` when destructuring Pinia stores to keep reactivity
+- Prefix composable files and functions with `use` (e.g. `useCart`, `composables/useCart.ts`)
+- Co-locate component-specific composables alongside the component; share cross-cutting composables in `src/composables/`
+- Use `defineAsyncComponent` or route-level lazy imports for heavy components to enable code splitting
+- Prefer `v-bind="$attrs"` on the root element of wrapper components to pass through HTML attributes
