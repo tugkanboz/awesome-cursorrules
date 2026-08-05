@@ -1,0 +1,100 @@
+# Project: Robot Framework Test Automation
+
+## Framework Structure
+- Use Robot Framework as the primary keyword-driven test runner
+- Organize test suites by feature or application module
+- Separate resource files, keywords, and test data from test cases
+- Use Python for custom keyword libraries when built-in keywords are insufficient
+
+## File Organization
+- Place test suites in a `tests/` directory, mirroring the application structure
+- Store reusable keywords and variables in `resources/` (e.g., `resources/keywords/`, `resources/variables/`)
+- Keep page object resource files in `resources/pages/`
+- Put custom Python libraries in `libraries/`
+- Use `__init__.robot` files to define suite-level setup/teardown
+
+## Naming Conventions
+- Write test case names as readable sentences: `User Can Log In With Valid Credentials`
+- Name keywords as imperative verb phrases: `Click Submit Button`, `Verify Error Message Is Visible`
+- Use UPPER_SNAKE_CASE for variables: `${BASE_URL}`, `${TIMEOUT}`
+- Name resource files after the feature or page they describe: `login_page.resource`, `common.resource`
+
+## Test Organization
+- Group related tests in the same suite file
+- Use tags to classify tests: `[Tags]    smoke    regression    login`
+- Implement suite-level `Suite Setup` / `Suite Teardown` for browser or session management
+- Use `Test Setup` / `Test Teardown` for per-test initialization and cleanup
+
+## Keyword Design
+- Write keywords at a single level of abstraction; avoid mixing high-level and low-level steps
+- Keep keywords short and focused — one action or verification per keyword
+- Use keyword arguments with defaults for flexibility: `Open Browser To Page    url=${HOME_URL}`
+- Document keywords with a single line explaining intent, not implementation
+
+## Best Practices
+- Follow the Arrange-Act-Assert (Given-When-Then) structure for BDD-style tests
+- Avoid hardcoding locators in test cases; define them as variables in resource files
+- Use SeleniumLibrary or Playwright Library (robotframework-browser) for web automation
+- Implement explicit waits (`Wait Until Element Is Visible`) instead of `Sleep`
+- Run tests in parallel with `pabot` (Parallel Robot Framework executor)
+
+## Variable Management
+- Define environment-specific variables in `.env` files and load them via a custom listener or `dotenv`
+- Use Variable Files (`.py` or `.yaml`) for complex or computed test data
+- Prefer `${VAR}` scalar variables for single values and `@{LIST}` / `&{DICT}` for collections
+- Keep secrets out of version control; pass them via environment variables or a vault
+
+## Page Object Pattern
+- Model each page or component as a `.resource` file exposing high-level keywords
+- Store locators as variables at the top of the resource file
+- Never access locators directly from test cases — always go through a page keyword
+- Example structure:
+  ```
+  *** Variables ***
+  ${LOGIN_USERNAME_FIELD}    id:username
+  ${LOGIN_PASSWORD_FIELD}    id:password
+  ${LOGIN_SUBMIT_BUTTON}     css:button[type='submit']
+
+  *** Keywords ***
+  Log In As
+      [Arguments]    ${username}    ${password}
+      Input Text     ${LOGIN_USERNAME_FIELD}    ${username}
+      Input Text     ${LOGIN_PASSWORD_FIELD}    ${password}
+      Click Button   ${LOGIN_SUBMIT_BUTTON}
+  ```
+
+## Error Handling
+- Use `Run Keyword And Expect Error` to assert that keywords raise expected failures
+- Implement `Run Keyword And Continue On Failure` when multiple independent assertions are needed
+- Add screenshot capture on failure via SeleniumLibrary's built-in `register_keyword_to_run_on_failure`
+- Log meaningful context with `Log` and `Log To Console` before critical steps
+
+## Test Data Management
+- Store test data in CSV or YAML files and load them with `DataDriver` library for data-driven tests
+- Use `Variables` section in suite files only for suite-scoped constants
+- Avoid mutable global state between tests — reset state in `Test Teardown`
+
+## Reporting
+- Use the built-in `log.html` and `report.html` for local analysis
+- Integrate with Allure using `robotframework-allure` listener for richer CI reports
+- Attach screenshots and page source to failing tests automatically
+- Configure `--outputdir results/` to keep CI artifacts organized
+
+## CI/CD Integration
+- Run Robot Framework with `robot --outputdir results --loglevel DEBUG tests/`
+- Merge parallel results with `rebot --merge results/*.xml`
+- Set exit codes correctly: RF returns non-zero on any test failure
+- Cache `pip` dependencies and the browser binary between CI runs
+
+## Linting and Quality
+- Use `robocop` for static analysis of `.robot` files
+- Use `robotidy` for automatic formatting
+- Enforce a maximum keyword length (recommended: 20 lines) via robocop rules
+- Run `robocop` and `robotidy --check` in pre-commit hooks
+
+## Documentation
+- Add a `[Documentation]` tag to every test case describing the business scenario
+- Document custom Python libraries with docstrings; RF exposes them in `libdoc`
+- Maintain a `README.md` covering setup, how to run tests, and how to add new suites
+
+Remember to keep test cases readable by non-technical stakeholders while keeping implementation details inside keywords and resource files.
