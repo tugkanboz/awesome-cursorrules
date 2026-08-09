@@ -31,7 +31,8 @@ awesome-cursorrules/
 │   ├── restassured-java-framework/
 │   ├── selenium-net-test-automation-framework/
 │   ├── selenium-python-test-automation-framework/
-│   └── vitest-javascript-unit-test-framework/
+│   ├── vitest-javascript-unit-test-framework/
+│   └── webdriverio-javascript-test-automation-framework/
 ├── 🏗️ frameworks/                  # Framework .cursor/rules examples (with nested rules)
 │   ├── cypress/                    # .cursor/rules/{core,patterns}/*.mdc
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
@@ -39,7 +40,8 @@ awesome-cursorrules/
 │   ├── cypress/                    # testing-fundamentals, api-testing
 │   ├── next-js/                    # app-router-patterns
 │   ├── react-typescript/           # component-development
-│   └── selenium-python/            # architecture, page-objects, test-patterns
+│   ├── selenium-python/            # architecture, page-objects, test-patterns
+│   └── vue-typescript/             # component-development
 └── 📖 legacy-migration/            # Before/after migration guides
 ```
 

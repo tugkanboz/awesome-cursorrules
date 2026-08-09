@@ -1,0 +1,329 @@
+---
+description: Vue 3 + TypeScript component patterns — Composition API, script setup, typed props/emits, composables, Pinia, and testing
+globs: **/*.vue,**/composables/**/*.ts,**/stores/**/*.ts,**/components/**/*.ts
+alwaysApply: false
+---
+# Vue 3 TypeScript Component Excellence
+
+## Modern Component Architecture
+- **`<script setup>`**: Use the Composition API with `<script setup lang="ts">` — it is the idiomatic Vue 3 style
+- **Single Responsibility**: Each `.vue` file models one cohesive piece of UI; extract logic to composables
+- **TypeScript First**: Define props, emits, and ref types explicitly; avoid `any`
+- **Accessibility**: Bind ARIA attributes and support keyboard navigation from the start
+
+## Component Structure Best Practices
+```vue
+<script setup lang="ts">
+import { computed, useAttrs } from 'vue'
+
+// ✅ Define props with full TypeScript types via defineProps
+interface ButtonProps {
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost'
+  size?: 'sm' | 'md' | 'lg'
+  disabled?: boolean
+  loading?: boolean
+  type?: 'button' | 'submit' | 'reset'
+}
+
+const props = withDefaults(defineProps<ButtonProps>(), {
+  variant: 'primary',
+  size: 'md',
+  disabled: false,
+  loading: false,
+  type: 'button',
+})
+
+// ✅ Typed emits
+const emit = defineEmits<{
+  click: [event: MouseEvent]
+}>()
+
+const attrs = useAttrs()
+
+// ✅ Computed class binding
+const buttonClasses = computed(() => [
+  'btn',
+  `btn--${props.variant}`,
+  `btn--${props.size}`,
+  {
+    'btn--disabled': props.disabled,
+    'btn--loading': props.loading,
+  },
+])
+
+function handleClick(event: MouseEvent) {
+  if (props.disabled || props.loading) {
+    event.preventDefault()
+    return
+  }
+  emit('click', event)
+}
+</script>
+
+<template>
+  <button
+    :type="type"
+    :class="buttonClasses"
+    :disabled="disabled || loading"
+    :aria-disabled="disabled || loading"
+    :aria-busy="loading"
+    v-bind="attrs"
+    @click="handleClick"
+  >
+    <span v-if="loading" class="btn__spinner" aria-hidden="true">
+      <LoadingSpinner size="sm" />
+    </span>
+    <span :class="loading ? 'btn__content--loading' : 'btn__content'">
+      <slot />
+    </span>
+  </button>
+</template>
+```
+
+## Composable Patterns
+```typescript
+// composables/useApi.ts
+import { ref, readonly, type Ref } from 'vue'
+
+interface UseApiOptions<T> {
+  immediate?: boolean
+  onSuccess?: (data: T) => void
+  onError?: (error: Error) => void
+}
+
+interface UseApiReturn<T> {
+  data: Readonly<Ref<T | null>>
+  loading: Readonly<Ref<boolean>>
+  error: Readonly<Ref<Error | null>>
+  execute: () => Promise<void>
+  reset: () => void
+}
+
+// ✅ Composable follows the "use" naming convention and returns reactive state
+export function useApi<T>(
+  apiCall: () => Promise<T>,
+  options: UseApiOptions<T> = {},
+): UseApiReturn<T> {
+  const { immediate = false, onSuccess, onError } = options
+
+  const data = ref<T | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+  let controller: AbortController | null = null
+
+  async function execute() {
+    controller?.abort()
+    controller = new AbortController()
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const result = await apiCall()
+      if (!controller.signal.aborted) {
+        data.value = result as T
+        onSuccess?.(result)
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        const wrapped = err instanceof Error ? err : new Error('Unknown error')
+        error.value = wrapped
+        onError?.(wrapped)
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        loading.value = false
+      }
+    }
+  }
+
+  function reset() {
+    controller?.abort()
+    data.value = null
+    error.value = null
+    loading.value = false
+  }
+
+  if (immediate) execute()
+
+  return { data: readonly(data), loading: readonly(loading), error: readonly(error), execute, reset }
+}
+```
+
+## Form Handling with VeeValidate + Zod
+```vue
+<script setup lang="ts">
+import { useForm, useField } from 'vee-validate'
+import { toTypedSchema } from '@vee-validate/zod'
+import { z } from 'zod'
+
+const loginSchema = toTypedSchema(
+  z.object({
+    email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+        'Password must contain uppercase, lowercase, and a number',
+      ),
+  }),
+)
+
+const { handleSubmit, errors, isSubmitting } = useForm({ validationSchema: loginSchema })
+
+const { value: email } = useField<string>('email')
+const { value: password } = useField<string>('password')
+
+const emit = defineEmits<{ submit: [email: string; password: string] }>()
+
+const onSubmit = handleSubmit(async (values) => {
+  emit('submit', values.email, values.password)
+})
+</script>
+
+<template>
+  <form @submit="onSubmit" class="login-form" novalidate>
+    <div class="form-group">
+      <label for="email">Email Address</label>
+      <input
+        id="email"
+        v-model="email"
+        type="email"
+        placeholder="Enter your email"
+        :aria-invalid="!!errors.email"
+        :aria-describedby="errors.email ? 'email-error' : undefined"
+        data-testid="email-input"
+      />
+      <span v-if="errors.email" id="email-error" class="field-error" role="alert">
+        {{ errors.email }}
+      </span>
+    </div>
+
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input
+        id="password"
+        v-model="password"
+        type="password"
+        placeholder="Enter your password"
+        :aria-invalid="!!errors.password"
+        :aria-describedby="errors.password ? 'password-error' : undefined"
+        data-testid="password-input"
+      />
+      <span v-if="errors.password" id="password-error" class="field-error" role="alert">
+        {{ errors.password }}
+      </span>
+    </div>
+
+    <Button
+      type="submit"
+      variant="primary"
+      size="lg"
+      :loading="isSubmitting"
+      :disabled="isSubmitting"
+      data-testid="submit-button"
+    >
+      {{ isSubmitting ? 'Signing in…' : 'Sign In' }}
+    </Button>
+  </form>
+</template>
+```
+
+## State Management with Pinia
+```typescript
+// stores/auth.ts
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+interface User {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'user' | 'guest'
+}
+
+// ✅ Setup store syntax mirrors Composition API — easier to type and test
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const isAuthenticated = computed(() => user.value !== null)
+
+  async function login(email: string, password: string) {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await authApi.login({ email, password })
+      user.value = response.user
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Login failed'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function logout() {
+    authApi.logout()
+    user.value = null
+  }
+
+  function clearError() {
+    error.value = null
+  }
+
+  return { user, loading, error, isAuthenticated, login, logout, clearError }
+})
+```
+
+## Testing with Vitest + Vue Test Utils
+```typescript
+// components/__tests__/LoginForm.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createTestingPinia } from '@pinia/testing'
+import LoginForm from '../LoginForm.vue'
+
+describe('LoginForm', () => {
+  const onSubmit = vi.fn()
+
+  beforeEach(() => {
+    onSubmit.mockClear()
+  })
+
+  function factory() {
+    return mount(LoginForm, {
+      props: { onSubmit },
+      global: {
+        plugins: [createTestingPinia()],
+      },
+    })
+  }
+
+  it('renders all form elements', () => {
+    const wrapper = factory()
+    expect(wrapper.find('[data-testid="email-input"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="password-input"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="submit-button"]').exists()).toBe(true)
+  })
+
+  it('shows validation error for invalid email', async () => {
+    const wrapper = factory()
+    await wrapper.find('[data-testid="email-input"]').setValue('not-an-email')
+    await wrapper.find('form').trigger('submit')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('Please enter a valid email address')
+  })
+
+  it('emits submit with valid credentials', async () => {
+    const wrapper = factory()
+    await wrapper.find('[data-testid="email-input"]').setValue('user@example.com')
+    await wrapper.find('[data-testid="password-input"]').setValue('Password1')
+    await wrapper.find('form').trigger('submit')
+    await wrapper.vm.$nextTick()
+    expect(onSubmit).toHaveBeenCalledWith('user@example.com', 'Password1')
+  })
+})
+```
