@@ -1,0 +1,215 @@
+# Project: pytest Python Test Automation Framework
+
+## Framework Structure
+- Use pytest as the primary test runner for all Python test types (unit, integration, e2e)
+- Organise tests in a dedicated `tests/` directory mirroring the `src/` package layout
+- Place shared fixtures and plugins in `conftest.py` files at the appropriate scope level
+- Separate unit, integration, and end-to-end tests into distinct subdirectories
+- Use `pyproject.toml` (or `pytest.ini`) as the single source of truth for pytest configuration
+
+```
+project/
+├── src/
+│   └── mypackage/
+│       ├── __init__.py
+│       └── services/
+│           └── user_service.py
+├── tests/
+│   ├── conftest.py          # Project-wide fixtures and plugins
+│   ├── unit/
+│   │   ├── conftest.py      # Unit-scope fixtures
+│   │   └── services/
+│   │       └── test_user_service.py
+│   ├── integration/
+│   │   ├── conftest.py
+│   │   └── test_user_api.py
+│   └── e2e/
+│       └── test_user_flows.py
+├── pyproject.toml
+└── pytest.ini               # or [tool.pytest.ini_options] in pyproject.toml
+```
+
+## Coding Standards
+- Follow PEP 8; enforce with `ruff` or `flake8` and format with `black`
+- Add type hints to all function signatures, including test functions and fixtures
+- Maximum line length: 88 characters (Black default)
+- Name test files with `test_` prefix; name test functions with `test_` prefix
+- Use descriptive test names that read as plain-English requirement statements
+
+## Test Organisation
+- Group related tests in classes only when they share meaningful state or fixtures; prefer module-level functions otherwise
+- Use `pytest.mark` to tag tests by type (`@pytest.mark.unit`, `@pytest.mark.integration`) and register custom marks in `pyproject.toml`
+- Use `pytest.mark.parametrize` to cover multiple input cases without duplicating test bodies
+- Keep each test focused on a single behaviour: one logical assertion per test
+
+## Best Practices
+- Follow the Arrange-Act-Assert (AAA) pattern with a blank line separating each phase
+- Prefer fixtures over `setUp`/`tearDown`; use `yield` fixtures for teardown logic
+- Never share mutable state between tests; each test must be fully independent
+- Avoid `time.sleep()` in tests; use retries or event-driven waits instead
+- Use `pytest-xdist` (`-n auto`) for parallel execution of independent test suites
+
+## Fixtures
+- Define fixtures at the narrowest scope needed (`function` → `class` → `module` → `session`)
+- Use `yield` for fixtures that require cleanup; code after `yield` runs as teardown
+- Place shared fixtures in `conftest.py`; keep test-file-only fixtures in the test file itself
+- Return only what the test needs; avoid "god fixtures" that return entire application state
+
+```python
+# conftest.py
+import pytest
+from mypackage.db import Database
+
+@pytest.fixture(scope="session")
+def db_engine():
+    engine = Database.connect("sqlite:///:memory:")
+    yield engine
+    engine.dispose()
+
+@pytest.fixture
+def db_session(db_engine):
+    session = db_engine.new_session()
+    yield session
+    session.rollback()
+    session.close()
+
+@pytest.fixture
+def user_factory(db_session):
+    def _make(name: str = "Alice", email: str = "alice@example.com"):
+        from mypackage.models import User
+        user = User(name=name, email=email)
+        db_session.add(user)
+        db_session.flush()
+        return user
+    return _make
+```
+
+## Parametrisation
+- Use `pytest.mark.parametrize` to express input/output tables; keep parameter tuples small and readable
+- Provide `ids` for parametrised cases to produce readable test node names
+- Combine multiple parametrize decorators for combinatorial coverage only when the matrix is intentional
+
+```python
+import pytest
+from mypackage.validators import validate_email
+
+@pytest.mark.parametrize(
+    ("email", "expected"),
+    [
+        ("user@example.com", True),
+        ("bad-email",        False),
+        ("",                 False),
+        ("a@b.c",           True),
+    ],
+    ids=["valid", "no-at", "empty", "short-domain"],
+)
+def test_validate_email(email: str, expected: bool) -> None:
+    assert validate_email(email) == expected
+```
+
+## Mocking
+- Use `pytest-mock`'s `mocker` fixture instead of `unittest.mock.patch` decorators for cleaner scoping
+- Prefer `mocker.patch.object(obj, "method")` over patching by string path when possible
+- Use `mocker.MagicMock` with `spec=` set to the real class to catch interface mismatches early
+- Assert on mock calls with `assert_called_once_with` / `assert_any_call`; avoid `assert mock.called` alone
+- Restore all patches automatically — `pytest-mock` handles this; never call `patcher.stop()` manually
+
+```python
+def test_send_welcome_email(mocker):
+    mock_send = mocker.patch("mypackage.email.send_email")
+    from mypackage.services import UserService
+
+    UserService.register(email="new@example.com")
+
+    mock_send.assert_called_once_with(
+        to="new@example.com",
+        subject="Welcome!",
+    )
+```
+
+## Markers and Skipping
+- Register all custom markers in `pyproject.toml` under `[tool.pytest.ini_options] markers`
+- Use `@pytest.mark.skip(reason=...)` and `@pytest.mark.skipif(condition, reason=...)` with a meaningful reason
+- Use `@pytest.mark.xfail(strict=True, reason=...)` for known bugs tracked in your issue tracker
+- Use `@pytest.mark.slow` to tag long-running tests and exclude them from the default run (`-m "not slow"`)
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+markers = [
+  "unit: fast, isolated unit tests",
+  "integration: tests requiring external services",
+  "slow: tests taking more than 5 seconds",
+  "smoke: critical path sanity checks",
+]
+```
+
+## Test Data Management
+- Use factory fixtures (or `factory_boy`) for reusable, composable test objects
+- Store static test data in `tests/fixtures/` as JSON or YAML files; load via a fixture
+- Generate dynamic or random data with `faker` to prevent false positives from hardcoded values
+- Never commit secrets or real credentials to test data; use environment variables or `pytest-dotenv`
+
+## Assertions and Error Handling
+- Use plain `assert` statements — pytest rewrites them for detailed failure output
+- Use `pytest.raises(ExceptionType)` as a context manager to assert on expected exceptions
+- Inspect `exc_info.value` for exception message content rather than relying on string matching alone
+- Use `pytest.approx()` for floating-point comparisons
+
+```python
+def test_divide_by_zero() -> None:
+    from mypackage.math import divide
+
+    with pytest.raises(ZeroDivisionError, match="division by zero"):
+        divide(1, 0)
+
+def test_float_sum() -> None:
+    assert 0.1 + 0.2 == pytest.approx(0.3)
+```
+
+## Coverage
+- Configure `pytest-cov` in `pyproject.toml`; run with `--cov=src --cov-report=term-missing`
+- Set branch coverage (`--cov-branch`) to catch untested conditional paths
+- Define minimum thresholds with `--cov-fail-under=80` (raise as the suite matures)
+- Exclude generated code, migrations, and `__main__` blocks from coverage with `# pragma: no cover`
+
+```toml
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = ["*/migrations/*", "*/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+```
+
+## Plugins and Tooling
+- `pytest-mock` — preferred mocking interface
+- `pytest-cov` — coverage integration
+- `pytest-xdist` — parallel test execution
+- `pytest-asyncio` — `async def` test support (set `asyncio_mode = "auto"` in config)
+- `pytest-httpx` / `responses` — HTTP client mocking
+- `factory_boy` — model factory fixtures
+- `faker` — realistic fake data generation
+- `pytest-dotenv` — `.env` loading for integration tests
+
+## CI/CD Integration
+- Run the full suite with `pytest -p no:randomly` in CI to detect order dependencies
+- Emit JUnit XML with `--junitxml=reports/junit.xml` for pipeline test result parsing
+- Cache the `.pytest_cache` directory between CI runs to speed up collection
+- Split test runs by marker in parallel CI jobs: `pytest -m unit`, `pytest -m integration`
+- Fail the pipeline immediately on the first collection error (`--co -q` in a pre-check step)
+
+## Reporting
+- Use `pytest-html` for local HTML reports: `--html=reports/report.html --self-contained-html`
+- Use `pytest-allure` for rich Allure reports with steps, attachments, and history
+- Always capture stdout/stderr on failure with `-s` locally; suppress it in CI with the default capture
+- Use `pytest --tb=short` in CI for concise tracebacks; use `--tb=long` when debugging locally
+
+## Documentation
+- Document fixture purpose and expected teardown behaviour in a short docstring
+- Maintain a `tests/README.md` describing how to run each test suite and required environment variables
+- Add a `CONTRIBUTING.md` section on writing tests, naming conventions, and marker usage
+
+Remember to leverage pytest's powerful fixture system and plugin ecosystem to keep tests fast, isolated, and expressive — favour composition over inheritance, and let `conftest.py` files define the natural scoping hierarchy of your test infrastructure.
