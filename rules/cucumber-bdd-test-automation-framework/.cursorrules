@@ -1,0 +1,137 @@
+# Project: Cucumber BDD Test Automation Framework
+
+## Framework Structure
+- Write feature files in Gherkin (.feature) under a `features/` or `src/test/resources/features/` directory
+- Implement step definitions in a dedicated `steps/` or `step_definitions/` package
+- Use a support directory (`features/support/` or `src/test/java/.../support/`) for hooks and world objects
+- Separate feature files by domain or user story area, not by technical layer
+
+## Coding Standards
+- Write Gherkin in plain business language — no technical implementation details in scenarios
+- Use consistent verb tenses: "Given" (state), "When" (action), "Then" (outcome)
+- Keep step definition methods small and focused; delegate to page objects or service clients
+- Name step definition classes by domain (e.g. `CheckoutSteps`, `LoginSteps`)
+
+## Feature File Writing
+- Each scenario must be self-contained and executable independently
+- Prefer `Scenario Outline` + `Examples` table over duplicated scenarios for data-driven tests
+- Use `Background` only for steps shared across every scenario in the file
+- Limit scenarios to one behaviour per scenario — avoid long chains of unrelated When/Then steps
+- Tag scenarios meaningfully: `@smoke`, `@regression`, `@wip`, `@slow`
+
+```gherkin
+# ✅ Good — describes business behaviour, not implementation
+Feature: User Authentication
+  As a registered user
+  I want to log in to my account
+  So that I can access my personal dashboard
+
+  Background:
+    Given the login page is displayed
+
+  Scenario: Successful login with valid credentials
+    When I enter valid credentials
+    Then I should be redirected to the dashboard
+    And I should see a welcome message
+
+  Scenario Outline: Login fails with invalid credentials
+    When I enter "<username>" and "<password>"
+    Then I should see the error "<message>"
+
+    Examples:
+      | username        | password   | message                    |
+      | unknown@test.co | anypass    | User not found             |
+      | user@test.co    | wrongpass  | Invalid password           |
+      | ""              | ""         | Email and password required|
+```
+
+## Step Definitions
+- Match steps with unambiguous, reusable patterns — avoid overly specific step text
+- Use parameter types (`{string}`, `{int}`, `{word}`) or custom parameter types to capture values
+- Never put assertions inside Given steps; reserve assertions for Then steps
+- Share state between steps via a World object or dependency injection, never via static fields
+
+```java
+// ✅ Java + Cucumber-JVM with PicoContainer injection
+@Given("the login page is displayed")
+public void theLoginPageIsDisplayed() {
+    loginPage.open();
+}
+
+@When("I enter valid credentials")
+public void iEnterValidCredentials() {
+    loginPage.login(testUser.getEmail(), testUser.getPassword());
+}
+
+@Then("I should be redirected to the dashboard")
+public void iShouldBeRedirectedToTheDashboard() {
+    assertThat(dashboardPage.isDisplayed()).isTrue();
+}
+```
+
+```javascript
+// ✅ JavaScript (Cucumber.js) with World context
+Given('the login page is displayed', async function () {
+  await this.page.goto('/login')
+})
+
+When('I enter valid credentials', async function () {
+  await this.loginPage.login(this.testUser.email, this.testUser.password)
+})
+
+Then('I should be redirected to the dashboard', async function () {
+  await expect(this.page).toHaveURL('/dashboard')
+})
+```
+
+## Hooks
+- Use `@Before` and `@After` hooks scoped to tags (`@Before("@browser")`) to avoid unnecessary setup
+- Put global teardown (screenshot on failure, session cleanup) in `@After`
+- Keep hook logic thin — delegate heavy setup to factory or fixture classes
+- Order hooks explicitly when execution sequence matters
+
+## World / Context Objects
+- Use a World object (Cucumber.js) or PicoContainer / Spring injection (Cucumber-JVM) for shared state
+- Reset all shared state before each scenario — stale state causes false passes
+- Never use Cucumber's global state for data that should be scenario-scoped
+
+## Page Objects / Service Clients
+- Abstract UI interactions in Page Object classes; step definitions call page objects, not WebDriver directly
+- For API testing, use a dedicated API client class accessed from step definitions
+- Keep assertions in step definitions, not in page objects
+
+## Test Data Management
+- Drive test data through Examples tables or external files (JSON, YAML, CSV)
+- Never hardcode environment-specific values (URLs, credentials) in feature files
+- Use a data factory or builder pattern for complex domain objects
+- Seed and clean up test data in `@Before`/`@After` hooks, not inside steps
+
+## Tags and Filtering
+- Run smoke suite: `cucumber --tags "@smoke"`
+- Skip work-in-progress: `cucumber --tags "not @wip"`
+- Combine tags with `and`/`or`: `cucumber --tags "@regression and not @slow"`
+- Define tag conventions in a team-wide `TAGS.md` document
+
+## Reporting
+- Generate HTML and JSON reports for CI consumption (Allure, Cucumber HTML Reporter)
+- Attach screenshots to failing scenarios in the `@After` hook
+- Use `publish: true` (Cucumber.js) or Allure plugin for shareable reports
+- Log step context (request/response, page URL) to help diagnose failures
+
+## CI/CD Integration
+- Parallelise test execution by feature file or scenario using `--parallel` (Cucumber.js) or Surefire forks (JVM)
+- Tag-filter in CI: run `@smoke` on every PR, full `@regression` suite on nightly builds
+- Fail the build on undefined or pending steps — never allow them to pass silently
+- Store Cucumber JSON reports as CI artifacts for trend analysis
+
+## Performance
+- Avoid `Thread.sleep`; use explicit waits or polling for asynchronous UI/API behaviour
+- Group slow integration scenarios under `@slow` and exclude them from the fast feedback loop
+- Reuse browser sessions across scenarios in the same feature when safe (stateless flows)
+
+## Documentation
+- Maintain one English-language feature file per user story or business capability
+- Use the Feature header (`As a… / I want… / So that…`) to record the business rationale
+- Keep a `README` in the features root explaining the tagging strategy and how to run locally
+
+Remember: Gherkin is a communication tool first and a test script second — every feature file should be readable and meaningful to a non-technical stakeholder.
