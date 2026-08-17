@@ -1,0 +1,259 @@
+---
+description: k6 load test patterns — script structure, VU scenarios, thresholds, checks, and SharedArray data. Apply when writing or reviewing k6 performance tests.
+globs: **/*.k6.js,**/*.k6.ts,**/load-tests/**/*.js,**/performance/**/*.js,k6.config.*
+alwaysApply: false
+---
+# k6 Load Test Patterns
+
+## Script Structure
+
+Every k6 script exports a `default` function that k6 executes once per VU per iteration. Use the `options` export to declare VU counts, stages, and thresholds.
+
+```javascript
+// tests/api-load.js
+import http from 'k6/http'
+import { check, sleep } from 'k6'
+import { Rate, Trend } from 'k6/metrics'
+
+// Custom metrics
+const errorRate = new Rate('errors')
+const checkoutDuration = new Trend('checkout_duration', true) // 'true' = milliseconds
+
+export const options = {
+  stages: [
+    { duration: '1m', target: 20 },  // ramp up to 20 VUs
+    { duration: '3m', target: 20 },  // hold at 20 VUs
+    { duration: '1m', target: 0 },   // ramp down
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<500', 'p(99)<1000'], // 95% under 500ms
+    http_req_failed:   ['rate<0.01'],                // <1% errors
+    errors:            ['rate<0.05'],                // custom metric
+  },
+}
+
+export default function () {
+  const res = http.get('https://api.example.com/products')
+
+  const success = check(res, {
+    'status is 200':        (r) => r.status === 200,
+    'response time < 500ms': (r) => r.timings.duration < 500,
+    'has products array':    (r) => JSON.parse(r.body).products !== undefined,
+  })
+
+  errorRate.add(!success)
+  sleep(1)
+}
+```
+
+## Scenarios
+
+Use `scenarios` in `options` to run multiple load patterns in the same test run.
+
+```javascript
+export const options = {
+  scenarios: {
+    // Constant arrival rate — controls requests/sec regardless of VU response time
+    api_load: {
+      executor: 'constant-arrival-rate',
+      rate: 100,             // 100 requests/second
+      timeUnit: '1s',
+      duration: '5m',
+      preAllocatedVUs: 50,
+      maxVUs: 200,
+      exec: 'apiScenario',  // function name to run
+    },
+
+    // Ramping VUs — controls concurrent users
+    checkout_stress: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        { duration: '2m', target: 50 },
+        { duration: '5m', target: 100 },
+        { duration: '2m', target: 0 },
+      ],
+      exec: 'checkoutScenario',
+    },
+  },
+
+  thresholds: {
+    'http_req_duration{scenario:api_load}':       ['p(95)<300'],
+    'http_req_duration{scenario:checkout_stress}': ['p(95)<800'],
+  },
+}
+
+export function apiScenario() {
+  const res = http.get(`${BASE_URL}/api/products`)
+  check(res, { 'status 200': (r) => r.status === 200 })
+  sleep(0.5)
+}
+
+export function checkoutScenario() {
+  // Longer user journey — see "User Flows" section below
+}
+```
+
+## Checks vs Thresholds
+
+- **`check()`** — per-request assertions; failures are counted but do NOT abort the test
+- **`thresholds`** — end-of-test pass/fail criteria; failing a threshold exits with code 99
+
+```javascript
+// ✅ Use checks for per-request validation
+const res = http.post(`${BASE_URL}/api/orders`, JSON.stringify(payload), { headers })
+
+const ok = check(res, {
+  'created':                 (r) => r.status === 201,
+  'has order id':            (r) => JSON.parse(r.body).orderId !== undefined,
+  'under 600ms':             (r) => r.timings.duration < 600,
+})
+
+// Propagate failures to a custom Rate metric
+errorRate.add(!ok)
+
+// ✅ Thresholds drive CI pass/fail — keep them in options, not in the test body
+// options.thresholds = { http_req_failed: ['rate<0.01'] }
+
+// ❌ Avoid — throwing or aborting inside the default function breaks VU state
+if (res.status !== 201) throw new Error('Order creation failed')
+```
+
+## Parameterisation with SharedArray
+
+`SharedArray` loads test data once and shares it across all VUs — avoids duplicating large datasets in memory.
+
+```javascript
+import { SharedArray } from 'k6/data'
+import { randomItem } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js'
+
+// Loaded once at init time, shared across all VUs
+const users = new SharedArray('users', function () {
+  return JSON.parse(open('./data/users.json'))
+})
+
+const products = new SharedArray('products', function () {
+  return JSON.parse(open('./data/products.json'))
+})
+
+export default function () {
+  const user = randomItem(users)
+  const product = randomItem(products)
+
+  const loginRes = http.post(`${BASE_URL}/api/auth/login`, {
+    email: user.email,
+    password: user.password,
+  })
+
+  check(loginRes, { 'logged in': (r) => r.status === 200 })
+  const token = JSON.parse(loginRes.body).token
+
+  const cartRes = http.post(
+    `${BASE_URL}/api/cart`,
+    JSON.stringify({ productId: product.id, quantity: 1 }),
+    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+  )
+
+  check(cartRes, { 'added to cart': (r) => r.status === 200 })
+  sleep(1)
+}
+```
+
+## User Flow Testing
+
+Group related requests into a single VU iteration to simulate realistic user journeys.
+
+```javascript
+import http from 'k6/http'
+import { check, group, sleep } from 'k6'
+
+export default function () {
+  let authToken
+
+  group('Login', () => {
+    const res = http.post(`${BASE_URL}/api/auth/login`, JSON.stringify({
+      email: 'perf-user@example.com',
+      password: 'testpassword',
+    }), { headers: { 'Content-Type': 'application/json' } })
+
+    check(res, {
+      'login successful': (r) => r.status === 200,
+      'token present':    (r) => JSON.parse(r.body).token !== undefined,
+    })
+
+    authToken = JSON.parse(res.body).token
+    sleep(0.5)
+  })
+
+  group('Browse Products', () => {
+    const headers = { Authorization: `Bearer ${authToken}` }
+
+    const listRes = http.get(`${BASE_URL}/api/products?page=1&limit=20`, { headers })
+    check(listRes, {
+      'products listed': (r) => r.status === 200,
+      'has items':       (r) => JSON.parse(r.body).items.length > 0,
+    })
+
+    const productId = JSON.parse(listRes.body).items[0].id
+    const detailRes = http.get(`${BASE_URL}/api/products/${productId}`, { headers })
+    check(detailRes, { 'product detail loaded': (r) => r.status === 200 })
+
+    sleep(1)
+  })
+
+  group('Checkout', () => {
+    const headers = {
+      Authorization: `Bearer ${authToken}`,
+      'Content-Type': 'application/json',
+    }
+
+    const orderRes = http.post(`${BASE_URL}/api/orders`, JSON.stringify({
+      items: [{ productId: 'prod-1', quantity: 1 }],
+      address: { street: '123 Test St', city: 'Testville' },
+    }), { headers })
+
+    check(orderRes, {
+      'order placed':  (r) => r.status === 201,
+      'has order id':  (r) => JSON.parse(r.body).orderId !== undefined,
+    })
+
+    sleep(2)
+  })
+}
+```
+
+## Environment Configuration
+
+```javascript
+// Use __ENV for environment-specific values — set via k6 run -e KEY=value
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000'
+const THINK_TIME = parseFloat(__ENV.THINK_TIME || '1')
+
+export const options = {
+  stages: __ENV.LOAD_PROFILE === 'stress'
+    ? [
+        { duration: '2m', target: 100 },
+        { duration: '5m', target: 200 },
+        { duration: '2m', target: 0 },
+      ]
+    : [
+        { duration: '1m', target: 10 },
+        { duration: '3m', target: 10 },
+        { duration: '1m', target: 0 },
+      ],
+}
+
+export default function () {
+  http.get(`${BASE_URL}/api/health`)
+  sleep(THINK_TIME)
+}
+```
+
+## Key Rules
+
+- Export `options` — never call `k6.sleep()` or set VUs inside the `default` function
+- Use `SharedArray` for any data file > a few KB to avoid per-VU memory duplication
+- Use `group()` to segment metrics by user journey step — makes dashboards far more readable
+- Use `constant-arrival-rate` to model target RPS; use `ramping-vus` to model concurrent users — pick the one that matches your SLA
+- Always set both a `p(95)` and an `http_req_failed` threshold — latency without error rate misses half the picture
+- Run with `--out json=result.json` locally and ship to Grafana k6 Cloud or InfluxDB+Grafana for trend analysis
