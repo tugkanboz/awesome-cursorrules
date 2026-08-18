@@ -1,0 +1,403 @@
+---
+description: Vue 3 + TypeScript patterns — Composition API with script setup, composables, Pinia state management, Vue Router 4, and performance optimization
+globs: **/*.vue,**/composables/**/*.ts,**/stores/**/*.ts,**/router/**/*.ts
+alwaysApply: false
+---
+# Vue 3 TypeScript Excellence
+
+## Script Setup & Composition API
+
+- Always use `<script setup lang="ts">` — it is the recommended, most concise form of Composition API
+- Define props with `defineProps<T>()` using a TypeScript interface; use `withDefaults` for default values
+- Define emits with `defineEmits<T>()` using a typed interface for full event type safety
+- Expose public API with `defineExpose()` only when parent refs need direct access
+
+```vue
+<!-- ✅ BaseButton.vue -->
+<script setup lang="ts">
+interface Props {
+  label: string
+  variant?: 'primary' | 'secondary' | 'ghost'
+  size?: 'sm' | 'md' | 'lg'
+  disabled?: boolean
+  loading?: boolean
+}
+
+interface Emits {
+  (e: 'click', event: MouseEvent): void
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  variant: 'primary',
+  size: 'md',
+  disabled: false,
+  loading: false,
+})
+
+const emit = defineEmits<Emits>()
+
+function handleClick(event: MouseEvent) {
+  if (!props.disabled && !props.loading) {
+    emit('click', event)
+  }
+}
+</script>
+
+<template>
+  <button
+    :class="['btn', `btn--${variant}`, `btn--${size}`, { 'btn--loading': loading }]"
+    :disabled="disabled || loading"
+    :aria-busy="loading"
+    @click="handleClick"
+  >
+    <span v-if="loading" class="btn__spinner" aria-hidden="true" />
+    <slot>{{ label }}</slot>
+  </button>
+</template>
+```
+
+## Composables (useX Pattern)
+
+- Extract reusable stateful logic into composables under `composables/` — one concern per file
+- Prefix composable functions with `use` and return a plain object (not a reactive wrapper)
+- Always clean up side effects (event listeners, timers, watchers) in `onUnmounted`
+
+```typescript
+// ✅ composables/useApi.ts
+import { ref, readonly } from 'vue'
+
+interface UseApiOptions<T> {
+  immediate?: boolean
+  onSuccess?: (data: T) => void
+  onError?: (error: Error) => void
+}
+
+export function useApi<T>(
+  fetcher: () => Promise<T>,
+  options: UseApiOptions<T> = {},
+) {
+  const data = ref<T | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+
+  async function execute() {
+    loading.value = true
+    error.value = null
+
+    try {
+      const result = await fetcher()
+      data.value = result as T
+      options.onSuccess?.(result)
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err))
+      error.value = e
+      options.onError?.(e)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  if (options.immediate) {
+    execute()
+  }
+
+  return {
+    data: readonly(data),
+    loading: readonly(loading),
+    error: readonly(error),
+    execute,
+  }
+}
+
+// ✅ composables/useLocalStorage.ts
+import { ref, watch } from 'vue'
+
+export function useLocalStorage<T>(key: string, initialValue: T) {
+  const stored = localStorage.getItem(key)
+  const value = ref<T>(stored ? (JSON.parse(stored) as T) : initialValue)
+
+  watch(
+    value,
+    (newValue) => {
+      localStorage.setItem(key, JSON.stringify(newValue))
+    },
+    { deep: true },
+  )
+
+  return value
+}
+```
+
+## Pinia State Management
+
+- One store per domain — keep stores focused and flat; avoid nested stores
+- Use `defineStore` with the Setup Store syntax for full TypeScript inference and composable support
+- Expose only what components need; keep internal helpers private inside the store function
+
+```typescript
+// ✅ stores/auth.ts
+import { ref, computed } from 'vue'
+import { defineStore } from 'pinia'
+
+interface User {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'user'
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const isAuthenticated = computed(() => user.value !== null)
+  const isAdmin = computed(() => user.value?.role === 'admin')
+
+  async function login(email: string, password: string) {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await authApi.login({ email, password })
+      user.value = response.user
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Login failed'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function logout() {
+    user.value = null
+    error.value = null
+  }
+
+  return { user, loading, error, isAuthenticated, isAdmin, login, logout }
+})
+```
+
+## Vue Router 4 Patterns
+
+- Use typed route params with `RouteLocationNormalizedLoaded` generics or `useRoute()` with casting
+- Prefer navigation guards at the route level (`beforeEnter`) or globally (`router.beforeEach`) over component lifecycle guards
+- Use `defineAsyncComponent` for lazy-loaded route components
+
+```typescript
+// ✅ router/index.ts
+import { createRouter, createWebHistory } from 'vue-router'
+import { defineAsyncComponent } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: '/',
+      component: () => import('@/layouts/DefaultLayout.vue'),
+      children: [
+        {
+          path: '',
+          name: 'home',
+          component: () => import('@/views/HomeView.vue'),
+        },
+        {
+          path: 'dashboard',
+          name: 'dashboard',
+          component: () => import('@/views/DashboardView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
+          path: 'admin',
+          name: 'admin',
+          component: () => import('@/views/AdminView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true },
+        },
+      ],
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue'),
+    },
+  ],
+})
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  if (to.meta.requiresAdmin && !auth.isAdmin) {
+    return { name: 'home' }
+  }
+})
+
+export default router
+```
+
+## Template Best Practices
+
+- Use `v-bind` shorthand (`:`) and `v-on` shorthand (`@`) consistently
+- Prefer `v-show` for frequent visibility toggles, `v-if` when the component/element is rarely rendered
+- Use `key` on `v-for` items with a stable, unique identifier — never use the array index as key for mutable lists
+- Keep template logic minimal; move conditions and computations to `computed` properties
+
+```vue
+<!-- ✅ UserList.vue -->
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useUsersStore } from '@/stores/users'
+import UserCard from '@/components/UserCard.vue'
+import EmptyState from '@/components/EmptyState.vue'
+
+const store = useUsersStore()
+
+const activeUsers = computed(() =>
+  store.users.filter((u) => u.status === 'active'),
+)
+</script>
+
+<template>
+  <section>
+    <EmptyState v-if="activeUsers.length === 0" message="No active users" />
+
+    <ul v-else class="user-list">
+      <li v-for="user in activeUsers" :key="user.id">
+        <UserCard :user="user" @deactivate="store.deactivate(user.id)" />
+      </li>
+    </ul>
+  </section>
+</template>
+```
+
+## Performance Optimization
+
+```vue
+<!-- ✅ Use v-once for truly static content -->
+<AppHeader v-once />
+
+<!-- ✅ Use v-memo to skip re-rendering when deps unchanged -->
+<UserRow
+  v-for="user in users"
+  :key="user.id"
+  v-memo="[user.name, user.status]"
+  :user="user"
+/>
+
+<!-- ✅ Lazy-load heavy or infrequently used components -->
+<script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
+import { Suspense } from 'vue'
+
+const HeavyChart = defineAsyncComponent(
+  () => import('@/components/HeavyChart.vue'),
+)
+</script>
+
+<template>
+  <Suspense>
+    <HeavyChart :data="chartData" />
+    <template #fallback>
+      <ChartSkeleton />
+    </template>
+  </Suspense>
+</template>
+```
+
+## Testing with Vitest + Vue Test Utils
+
+```typescript
+// ✅ components/__tests__/BaseButton.spec.ts
+import { describe, it, expect, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import BaseButton from '@/components/BaseButton.vue'
+
+describe('BaseButton', () => {
+  it('renders label text', () => {
+    const wrapper = mount(BaseButton, { props: { label: 'Submit' } })
+    expect(wrapper.text()).toContain('Submit')
+  })
+
+  it('emits click event when not disabled', async () => {
+    const wrapper = mount(BaseButton, { props: { label: 'Click me' } })
+    await wrapper.trigger('click')
+    expect(wrapper.emitted('click')).toHaveLength(1)
+  })
+
+  it('does not emit click when disabled', async () => {
+    const wrapper = mount(BaseButton, {
+      props: { label: 'Click me', disabled: true },
+    })
+    await wrapper.trigger('click')
+    expect(wrapper.emitted('click')).toBeUndefined()
+  })
+
+  it('shows loading state', () => {
+    const wrapper = mount(BaseButton, {
+      props: { label: 'Save', loading: true },
+    })
+    expect(wrapper.find('.btn__spinner').exists()).toBe(true)
+    expect(wrapper.attributes('aria-busy')).toBe('true')
+  })
+})
+
+// ✅ stores/__tests__/auth.spec.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
+
+vi.mock('@/api/auth', () => ({
+  authApi: {
+    login: vi.fn(),
+    logout: vi.fn(),
+  },
+}))
+
+describe('useAuthStore', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('sets user on successful login', async () => {
+    const { authApi } = await import('@/api/auth')
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      user: { id: '1', email: 'a@b.com', name: 'Alice', role: 'user' },
+    })
+
+    const store = useAuthStore()
+    await store.login('a@b.com', 'password')
+
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.user?.email).toBe('a@b.com')
+  })
+
+  it('sets error on failed login', async () => {
+    const { authApi } = await import('@/api/auth')
+    vi.mocked(authApi.login).mockRejectedValueOnce(new Error('Invalid credentials'))
+
+    const store = useAuthStore()
+    await expect(store.login('a@b.com', 'wrong')).rejects.toThrow()
+
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.error).toBe('Invalid credentials')
+  })
+})
+```
+
+## Key Rules
+
+- Always use `<script setup lang="ts">` — avoid Options API in new code
+- Never mutate props directly; emit events to request parent-side changes
+- Use `computed` for derived state; never recalculate in the template
+- Prefer `readonly()` on refs returned from composables to signal read-only intent
+- Use `toRef` / `toValue` when passing a composable's reactive values to other composables — keeps reactivity intact
+- Pin `pinia` and `vue-router` to major versions matching your Vue 3 minor — mismatches cause subtle reactivity bugs
