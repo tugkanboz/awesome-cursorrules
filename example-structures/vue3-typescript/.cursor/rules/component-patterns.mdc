@@ -1,0 +1,276 @@
+---
+description: Vue 3 + TypeScript component patterns — Composition API, composables, typed props/emits, Pinia, and testing
+globs: **/*.vue,**/composables/**/*.ts,**/stores/**/*.ts,**/*.vue.ts
+alwaysApply: false
+---
+# Vue 3 TypeScript Component Excellence
+
+## Composition API with `<script setup>`
+
+- Always use `<script setup lang="ts">` — it's the most concise and performant SFC form
+- Define props with `defineProps<T>()` and emits with `defineEmits<T>()` for full type inference
+- Use `withDefaults()` to supply default prop values when using generic `defineProps`
+- Keep template, script, and style in a single `.vue` file; extract logic to composables when it grows
+
+```vue
+<!-- ✅ Well-typed SFC with <script setup> -->
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+
+interface Props {
+  modelValue: string
+  placeholder?: string
+  disabled?: boolean
+  maxLength?: number
+}
+
+interface Emits {
+  (e: 'update:modelValue', value: string): void
+  (e: 'blur', event: FocusEvent): void
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  placeholder: '',
+  disabled: false,
+  maxLength: 255,
+})
+
+const emit = defineEmits<Emits>()
+
+const internalValue = ref(props.modelValue)
+const remainingChars = computed(() => props.maxLength - internalValue.value.length)
+
+function handleInput(event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  internalValue.value = value
+  emit('update:modelValue', value)
+}
+
+function handleBlur(event: FocusEvent) {
+  emit('blur', event)
+}
+</script>
+
+<template>
+  <div class="text-field">
+    <input
+      :value="internalValue"
+      :placeholder="placeholder"
+      :disabled="disabled"
+      :maxlength="maxLength"
+      class="text-field__input"
+      @input="handleInput"
+      @blur="handleBlur"
+    />
+    <span class="text-field__counter" :class="{ 'text-field__counter--warn': remainingChars < 20 }">
+      {{ remainingChars }}
+    </span>
+  </div>
+</template>
+```
+
+## Composables
+
+- Extract reusable stateful logic into `composables/use*.ts` files
+- Return reactive refs and computed values, not raw values
+- Accept optional configuration as a plain object parameter
+- Handle cleanup in `onUnmounted` to prevent memory leaks
+
+```typescript
+// ✅ composables/useFetch.ts — generic data-fetching composable
+import { ref, shallowRef, watchEffect, type Ref } from 'vue'
+
+interface UseFetchOptions {
+  immediate?: boolean
+}
+
+interface UseFetchReturn<T> {
+  data: Ref<T | null>
+  error: Ref<Error | null>
+  loading: Ref<boolean>
+  execute: () => Promise<void>
+}
+
+export function useFetch<T>(
+  url: string | Ref<string>,
+  options: UseFetchOptions = {}
+): UseFetchReturn<T> {
+  const { immediate = true } = options
+
+  const data = shallowRef<T | null>(null)
+  const error = ref<Error | null>(null)
+  const loading = ref(false)
+
+  let controller: AbortController | null = null
+
+  async function execute(): Promise<void> {
+    if (controller) controller.abort()
+    controller = new AbortController()
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const resolvedUrl = typeof url === 'string' ? url : url.value
+      const res = await fetch(resolvedUrl, { signal: controller.signal })
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+
+      data.value = await res.json()
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        error.value = err instanceof Error ? err : new Error('Unknown error')
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  if (immediate) {
+    watchEffect(execute)
+  }
+
+  return { data, error, loading, execute }
+}
+```
+
+## Pinia Store Patterns
+
+- Define stores with `defineStore()` using the Setup Store syntax for full TypeScript inference
+- Keep store state, getters, and actions clearly separated
+- Use `storeToRefs()` in components to destructure reactive state without losing reactivity
+- Never mutate state directly outside the store — use actions
+
+```typescript
+// ✅ stores/useCartStore.ts
+import { ref, computed } from 'vue'
+import { defineStore } from 'pinia'
+
+interface CartItem {
+  id: string
+  name: string
+  price: number
+  quantity: number
+}
+
+export const useCartStore = defineStore('cart', () => {
+  // State
+  const items = ref<CartItem[]>([])
+  const loading = ref(false)
+
+  // Getters
+  const totalItems = computed(() =>
+    items.value.reduce((sum, item) => sum + item.quantity, 0)
+  )
+
+  const totalPrice = computed(() =>
+    items.value.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  )
+
+  // Actions
+  function addItem(product: Omit<CartItem, 'quantity'>) {
+    const existing = items.value.find((i) => i.id === product.id)
+    if (existing) {
+      existing.quantity++
+    } else {
+      items.value.push({ ...product, quantity: 1 })
+    }
+  }
+
+  function removeItem(id: string) {
+    const index = items.value.findIndex((i) => i.id === id)
+    if (index !== -1) items.value.splice(index, 1)
+  }
+
+  function clearCart() {
+    items.value = []
+  }
+
+  return { items, loading, totalItems, totalPrice, addItem, removeItem, clearCart }
+})
+```
+
+```vue
+<!-- ✅ Using Pinia store in a component -->
+<script setup lang="ts">
+import { storeToRefs } from 'pinia'
+import { useCartStore } from '@/stores/useCartStore'
+
+const cartStore = useCartStore()
+// storeToRefs preserves reactivity when destructuring
+const { items, totalItems, totalPrice } = storeToRefs(cartStore)
+const { addItem, removeItem } = cartStore
+</script>
+```
+
+## TypeScript Patterns for Vue 3
+
+- Use `defineComponent()` only for options API or when `<script setup>` can't be used
+- Type route params and query with `useRoute()` from vue-router
+- Prefer `PropType<T>` only in options API — `defineProps<T>()` is cleaner in `<script setup>`
+
+```typescript
+// ✅ Typed route usage
+import { useRoute, useRouter } from 'vue-router'
+
+const route = useRoute()
+const router = useRouter()
+
+const productId = route.params.id as string  // or use a typed route helper
+
+async function goToProduct(id: string) {
+  await router.push({ name: 'product-detail', params: { id } })
+}
+```
+
+## Component Testing with Vitest + Vue Test Utils
+
+- Mount components with `mount()` or `shallowMount()` from `@vue/test-utils`
+- Provide Pinia stores with `createTestingPinia()` from `@pinia/testing`
+- Query elements by role or test-id to avoid coupling tests to markup structure
+- Use `await nextTick()` after triggering reactive updates before asserting
+
+```typescript
+// ✅ Component test
+import { describe, it, expect, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createTestingPinia } from '@pinia/testing'
+import CartButton from '@/components/CartButton.vue'
+import { useCartStore } from '@/stores/useCartStore'
+
+describe('CartButton', () => {
+  it('displays the current item count from the store', async () => {
+    const wrapper = mount(CartButton, {
+      global: {
+        plugins: [
+          createTestingPinia({
+            initialState: { cart: { items: [{ id: '1', name: 'Widget', price: 10, quantity: 3 }] } },
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.find('[data-testid="cart-count"]').text()).toBe('3')
+  })
+
+  it('calls addItem when the button is clicked', async () => {
+    const wrapper = mount(CartButton, {
+      global: { plugins: [createTestingPinia({ createSpy: vi.fn })] },
+    })
+
+    const store = useCartStore()
+    await wrapper.find('button').trigger('click')
+
+    expect(store.addItem).toHaveBeenCalledOnce()
+  })
+})
+```
+
+## Key Rules
+
+- Use `ref()` for primitives and `reactive()` for objects when the entire object is replaced together
+- Prefer `shallowRef()` for large objects that don't need deep reactivity tracking
+- Always `await nextTick()` before DOM assertions in tests
+- Use `v-bind` shorthand (`:`) and `v-on` shorthand (`@`) consistently
+- Do not use `this` inside `<script setup>` — there is no component instance exposed
+- Prefer named exports over default exports for composables and utilities; use default export only for the SFC itself
