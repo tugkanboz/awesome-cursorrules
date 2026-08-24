@@ -1,0 +1,96 @@
+# Project: Jest Unit Testing Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript and TypeScript projects
+- Organize tests in `__tests__` directories alongside source files, or with `.test.ts`/`.spec.ts` suffixes
+- Use TypeScript for type-safe test implementations with `ts-jest` or Babel transform
+- Configure Jest via `jest.config.ts` (or `jest.config.js`) as the single source of truth
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices
+- Use meaningful test and variable naming that reads as documentation
+- Implement clean code principles and keep each test focused
+- Limit `describe` block nesting to 3 levels maximum
+
+## Test Organization
+- Group related tests using `describe` blocks reflecting modules or user flows
+- Use `it`/`test` functions with descriptive names that read as requirements
+- Implement `beforeEach`/`afterEach` for setup and teardown; prefer `beforeEach` over `beforeAll` to ensure test isolation
+- Separate unit, integration, and snapshot tests into distinct directories or use `testPathPattern` in separate configs
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern in every test
+- Write focused, single-responsibility tests — one behaviour per `it` block
+- Avoid test interdependencies and shared mutable state between tests
+- Use `jest.fn()` for mocking instead of manual stub implementations
+- Reset all mocks in `afterEach` with `jest.clearAllMocks()` or configure `clearMocks: true` in `jest.config.ts`
+
+## Mocking Strategies
+- Use `jest.mock('module-path')` for automatic module-level mocking
+- Use `jest.spyOn(object, 'method')` for method-level spying without replacing the implementation
+- Use `jest.useFakeTimers()` for `setTimeout`, `setInterval`, and `Date`-dependent tests; restore with `jest.useRealTimers()`
+- Mock HTTP requests with `msw` (Mock Service Worker) or `jest.mock` on `axios`/`fetch` wrappers
+- Use `jest.isolateModules()` when module-level side effects must be isolated per test
+
+## Assertions
+- Use `expect()` with the most specific matcher available (prefer `toEqual` over `toBe` for objects)
+- Implement custom matchers via `expect.extend()` for domain-specific assertions
+- Use `toMatchSnapshot()` and `toMatchInlineSnapshot()` for stable serialised output
+- Assert on thrown errors with `expect(() => fn()).toThrow(ErrorClass)` or `await expect(asyncFn()).rejects.toThrow()`
+- Always assert the number of expected calls on critical mocks with `toHaveBeenCalledTimes(n)`
+
+## Coverage
+- Configure coverage with the `v8` provider for accuracy; fall back to `babel` for legacy setups
+- Set meaningful thresholds in `jest.config.ts` under `coverageThreshold` (e.g., 80% branches and lines)
+- Use `collectCoverageFrom` patterns to include source files and exclude generated or non-testable code
+- Generate `lcov` and `html` reports for CI upload and local visualisation
+- Run `jest --coverage` in CI; fail the pipeline when thresholds are not met
+
+## Performance
+- Use `--runInBand` only for debugging; prefer the default worker pool for parallel execution
+- Configure `maxWorkers` to match CI runner CPU count (e.g., `maxWorkers: '50%'`)
+- Leverage `jest --testPathPattern` or `--testNamePattern` to run targeted subsets during development
+- Keep individual test files small — large test files slow the worker pool and reduce parallelism
+- Use `jest --cache` (enabled by default) and commit the cache path in `.gitignore`
+
+## Snapshot Testing
+- Store snapshot files in `__snapshots__` directories adjacent to test files and commit them to version control
+- Prefer `toMatchInlineSnapshot()` for small, readable snapshots; use file snapshots for large outputs
+- Update snapshots intentionally with `jest --updateSnapshot`; always review diffs in PRs
+- Avoid snapshotting highly volatile data (timestamps, generated IDs) — mask with `expect.any(Number)`
+
+## Test Data Management
+- Use factory functions or fixtures for reusable test data
+- Define TypeScript interfaces or types for all test data structures
+- Avoid hardcoded magic values; use named constants or enums
+- Generate dynamic or random data with `@faker-js/faker` for isolation between test runs
+- Store environment-specific values in `.env.test` and load with `dotenv` in the Jest setup file
+
+## CI/CD Integration
+- Configure `--ci` flag in CI pipelines to treat snapshot mismatches as failures
+- Use `--reporters=default,jest-junit` for JUnit XML output compatible with CI artefact parsers
+- Upload coverage reports to services like Codecov, SonarCloud, or Coveralls via CLI steps
+- Cache `node_modules` and the Jest cache directory between pipeline runs for speed
+- Run `jest --passWithNoTests` only for packages that legitimately have no tests; avoid as a blanket flag
+
+## Environment Configuration
+- Set `testEnvironment: 'node'` for backend and CLI tests; `testEnvironment: 'jsdom'` for DOM-dependent code
+- Use `setupFilesAfterFramework` (formerly `setupTestFrameworkScriptFile`) for global setup such as `@testing-library/jest-dom` matchers
+- Define project-level `moduleNameMapper` to resolve path aliases matching `tsconfig.json` `paths`
+- Use `globals` in `jest.config.ts` for `ts-jest` compiler options instead of a separate tsconfig file where possible
+- Separate `jest.config.ts` files for unit and integration test suites; reference them with `--config` or Jest `projects`
+
+## Error Handling
+- Test both success and failure code paths for every public function
+- Assert on specific error messages and types, not just that an error was thrown
+- Use `expect.assertions(n)` in async tests to catch missing `await` or silent failures
+- Implement retry logic tests (e.g., with fake timers) for flaky network or queue operations
+- Test edge cases: empty arrays, null/undefined inputs, boundary values, and maximum payload sizes
+
+## Documentation
+- Document complex test scenarios with a brief inline comment explaining the WHY, not the WHAT
+- Maintain a `docs/testing.md` describing test structure conventions, factory locations, and mock strategies
+- Include examples of custom matchers and shared fixtures in the project wiki or README
+- Document CI configuration steps so contributors can reproduce test runs locally
+
+Remember to leverage Jest's built-in module resolver, snapshot engine, and worker-based parallelism — it is the most widely adopted JavaScript testing framework and integrates natively with React, Node.js, NestJS, and virtually every modern JS ecosystem.
