@@ -2,39 +2,42 @@
 
 ## Framework Structure
 - Use Jest as the primary test runner for JavaScript/TypeScript projects
-- Organize tests in __tests__ directories or co-located with source files using .test.js/.spec.js extensions
+- Organize tests in __tests__ directories or co-locate with source files using .test.js/.spec.js suffix
 - Use TypeScript with ts-jest or Babel for transpilation
+- Configure jest.config.js (or jest.config.ts) as the single source of truth for test settings
 - Leverage Jest's built-in code coverage, mocking, and snapshot capabilities
 
 ## Coding Standards
 - Follow JavaScript/TypeScript best practices
-- Use meaningful test and variable naming that conveys intent
+- Use meaningful, descriptive test and variable names
 - Implement clean code principles
 - Limit describe block nesting to 3 levels maximum
+- Keep each test file focused on a single module or component
 - Prefer async/await over Promise chains in asynchronous tests
 
 ## Test Organization
 - Group related tests using describe blocks
 - Use it/test functions for individual test cases
-- Implement beforeEach/afterEach for test-scoped setup and teardown
-- Use beforeAll/afterAll sparingly for expensive shared resources
+- Implement beforeEach/afterEach for per-test setup and teardown
+- Use beforeAll/afterAll only for expensive shared resources that are truly read-only
 - Separate unit, integration, and e2e tests into distinct directories
 
 ## Best Practices
-- Follow Arrange-Act-Assert (AAA) pattern
+- Follow Arrange-Act-Assert (AAA) pattern consistently
 - Write focused, single-responsibility tests
-- Avoid test interdependencies and shared mutable state
+- Avoid test interdependencies and shared mutable state between tests
 - Use jest.fn() for creating mock functions
-- Clear mocks between tests with jest.clearAllMocks() or clearMocks: true in config
+- Clear or reset mocks in afterEach to prevent cross-test pollution
 - Prefer toEqual for deep equality checks over toBe for objects
+- Prefer explicit assertions over implicit pass-by-not-throwing
 
 ## Mocking Strategies
-- Use jest.mock() for module-level mocking
-- Implement jest.spyOn() for method-level spying without replacing the implementation
-- Use jest.useFakeTimers() for tests involving setTimeout, setInterval, or Date
-- Mock HTTP requests with jest-fetch-mock or msw (Mock Service Worker)
+- Use jest.mock() for module-level mocking with automatic hoisting
+- Implement jest.spyOn() for method-level spying without replacing the full module
+- Use jest.useFakeTimers() with modern mode for timer-dependent tests
+- Mock HTTP requests with msw (Mock Service Worker) for realistic network simulation
 - Use manual mocks in __mocks__ directories for complex or frequently used modules
-- Always restore mocks after tests with jest.restoreAllMocks() in afterEach
+- Restore all mocks after each test with jest.restoreAllMocks() or clearMocks: true in config
 
 ## Assertions
 - Use expect() with specific, descriptive matchers
@@ -42,27 +45,31 @@
 - Use toMatchSnapshot() only for stable, intentional snapshot testing
 - Use expect.assertions(n) in async tests to ensure all assertions run
 - Prefer specific matchers (toHaveBeenCalledWith) over generic ones (toBeTruthy)
+- Use toThrow and toThrowError with specific error messages or types
 
 ## Coverage
-- Configure coverage with the v8 or babel provider via coverageProvider
+- Configure coverage with the v8 provider (recommended for accuracy) via coverageProvider
 - Set meaningful thresholds in coverageThreshold for statements, branches, functions, and lines
 - Use collectCoverageFrom to include all source files, not just tested ones
 - Exclude generated files, configuration, and index barrel files from coverage
 - Generate lcov reports for CI integration and HTML reports for local review
+- Run coverage in CI but not in watch mode to keep local feedback fast
 
 ## Performance
-- Use --runInBand for serial execution when tests share global state
-- Enable --maxWorkers to control parallelism based on available CPU cores
+- Use --runInBand only for debugging; prefer parallel workers in CI
+- Configure maxWorkers in jest.config to balance CPU usage in CI environments
+- Use testPathPattern or testNamePattern to run targeted subsets during development
 - Use jest --onlyFailures (or -f) to rerun only failing tests during development
-- Implement proper test isolation to enable safe parallel execution
+- Use --bail to stop early on first failure in pre-commit hooks
 - Minimize unnecessary setup/teardown operations to reduce suite runtime
 
 ## Snapshot Testing
 - Keep snapshots small and focused on the critical output structure
 - Commit snapshots to version control alongside their test files
 - Update snapshots deliberately with jest --updateSnapshot (-u) after intentional changes
-- Use inline snapshots (toMatchInlineSnapshot) for small, readable outputs
+- Use inline snapshots (toMatchInlineSnapshot) for small, readable, self-documenting outputs
 - Avoid snapshotting highly dynamic content (timestamps, random IDs)
+- Delete obsolete snapshots with --ci flag to prevent stale files from accumulating
 
 ## Test Data Management
 - Use factory functions or fixtures for reusable, composable test data
@@ -79,11 +86,12 @@
 - Use globalSetup and globalTeardown for one-time infrastructure setup (databases, servers)
 
 ## CI/CD Integration
-- Use --ci flag in CI environments to prevent updating snapshots automatically
+- Use --ci flag in CI environments to disable interactive prompts and fail on missing snapshots
 - Configure --reporters with jest-junit for JUnit XML output for CI pipeline compatibility
 - Enable test result caching with --cache for faster repeated runs
 - Upload coverage reports to services like Codecov or SonarCloud
 - Run tests with --forceExit if integration tests may leave open handles
+- Run linting and type-checking in parallel with the test suite, not sequentially
 
 ## TypeScript Integration
 - Use ts-jest or @swc/jest for TypeScript transpilation in Jest
@@ -95,6 +103,7 @@
 - Test both success and failure code paths explicitly
 - Assert on specific error messages and types using toThrow and toThrowError
 - Use expect(fn).rejects.toThrow() for async error assertions
+- Use expect.assertions(n) in async tests to catch silent resolution instead of rejection
 - Verify error boundaries and fallback behavior in component tests
 
 ## Documentation
@@ -103,4 +112,4 @@
 - Include examples for any custom matchers defined in the project
 - Document project-specific mock strategies and shared fixture patterns
 
-Remember to leverage Jest's rich ecosystem of plugins and its deep integration with Babel and TypeScript toolchains for a fast, reliable unit testing experience.
+Remember to keep tests fast, deterministic, and independent — and leverage Jest's rich ecosystem of plugins and its deep integration with Babel and TypeScript toolchains for a reliable unit testing experience.
