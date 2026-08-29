@@ -1,0 +1,169 @@
+# Project: Playwright Python Test Automation Framework
+
+## Framework Structure
+- Use pytest-playwright as the test runner and fixture provider
+- Implement Page Object Model pattern with Python classes
+- Maintain conftest.py for shared fixtures and browser configuration
+- Separate sync and async test suites when needed
+- Use type hints throughout for IDE support and readability
+
+## Coding Standards
+- Follow PEP 8 style guide with black formatter (line length: 88)
+- Use snake_case for functions, variables, and file names
+- Use PascalCase for Page Object classes
+- Use type hints (from playwright.sync_api import Page, Locator, expect)
+- Run mypy for static type checking
+
+## Test Organization
+- Group tests by feature using pytest markers (@pytest.mark.smoke, @pytest.mark.regression)
+- Use parametrize for data-driven tests
+- Keep one page object per file, mirroring the application structure
+- Prefix test files with test_ and test functions with test_
+
+## Page Object Model
+- Inherit page objects from a BasePage class that wraps the Playwright Page
+- Expose only user-level actions from page objects (click_login, fill_search)
+- Keep locators as class-level constants or properties, not inline strings
+- Never assert inside page objects; return values for the test to assert
+
+```python
+# pages/base_page.py
+from playwright.sync_api import Page, Locator
+
+class BasePage:
+    def __init__(self, page: Page) -> None:
+        self.page = page
+
+    def navigate(self, path: str) -> None:
+        self.page.goto(path)
+
+# pages/login_page.py
+from playwright.sync_api import Page, expect
+from .base_page import BasePage
+
+class LoginPage(BasePage):
+    URL = "/login"
+    USERNAME_INPUT = "#username"
+    PASSWORD_INPUT = "#password"
+    SUBMIT_BUTTON = "button[type='submit']"
+    ERROR_MESSAGE = "[data-testid='error']"
+
+    def login(self, username: str, password: str) -> None:
+        self.page.fill(self.USERNAME_INPUT, username)
+        self.page.fill(self.PASSWORD_INPUT, password)
+        self.page.click(self.SUBMIT_BUTTON)
+
+    def error_message(self) -> str:
+        return self.page.locator(self.ERROR_MESSAGE).inner_text()
+```
+
+## Locator Strategy
+- Prefer semantic locators: get_by_role(), get_by_label(), get_by_placeholder(), get_by_text()
+- Use data-testid attributes as a last resort for elements without semantic meaning
+- Avoid CSS selectors based on styling (classes like .btn-primary that can change)
+- Chain locators with .filter() and .nth() rather than building complex CSS
+
+```python
+# ✅ Preferred
+page.get_by_role("button", name="Submit")
+page.get_by_label("Email address")
+page.get_by_placeholder("Search products")
+page.get_by_test_id("cart-item-count")
+
+# ❌ Avoid
+page.locator(".btn.btn-primary.submit")
+page.locator("div > span:nth-child(2)")
+```
+
+## Assertions
+- Always use Playwright's expect() for web assertions — it auto-retries
+- Never use raw Python assert on locator states (assert locator.is_visible())
+- Set explicit timeouts only when the default 5 s is insufficient
+
+```python
+from playwright.sync_api import expect
+
+expect(page.get_by_role("heading")).to_have_text("Dashboard")
+expect(page.locator("[data-testid='toast']")).to_be_visible()
+expect(page.get_by_role("button", name="Save")).to_be_enabled()
+expect(page).to_have_url("/dashboard")
+```
+
+## Fixtures and Configuration
+- Use conftest.py for browser-level and context-level fixtures
+- Override browser_context_args to set locale, timezone, permissions
+- Use storage_state for authenticated sessions to avoid re-login on every test
+- Scope session-level fixtures to "session" to share across the test run
+
+```python
+# conftest.py
+import pytest
+from playwright.sync_api import Browser, BrowserContext, Page
+
+@pytest.fixture(scope="session")
+def authenticated_context(browser: Browser) -> BrowserContext:
+    context = browser.new_context()
+    page = context.new_page()
+    page.goto("/login")
+    page.fill("#username", "testuser")
+    page.fill("#password", "secret")
+    page.click("button[type='submit']")
+    page.wait_for_url("/dashboard")
+    context.storage_state(path="auth.json")
+    context.close()
+
+    return browser.new_context(storage_state="auth.json")
+
+@pytest.fixture
+def auth_page(authenticated_context: BrowserContext) -> Page:
+    page = authenticated_context.new_page()
+    yield page
+    page.close()
+```
+
+## Browser and Context Management
+- Configure browser launch args via pytest.ini or pyproject.toml (--browser, --headed)
+- Use browser contexts to isolate state between tests (cookies, localStorage)
+- Set viewport, locale, and geolocation at the context level, not the page level
+- Run multiple browsers with --browser chromium --browser firefox --browser webkit
+
+## Test Data Management
+- Store test data in JSON or YAML files under a tests/fixtures/ directory
+- Use pytest.fixture with params for data-driven parametrization
+- Keep credentials and secrets in environment variables, never in source files
+- Use python-dotenv for local development; CI secrets for pipelines
+
+## Parallel Execution
+- Use pytest-xdist (-n auto) for parallelism; ensure each test is fully isolated
+- Never share mutable state between tests; each test gets its own browser context
+- Tag slow tests with @pytest.mark.slow and exclude from fast feedback loops
+
+## Debugging and Tracing
+- Enable traces for failed tests via --tracing=retain-on-failure
+- Use page.screenshot() in conftest teardown for failed tests
+- Run with PWDEBUG=1 to open Playwright Inspector interactively
+- Use playwright codegen <url> to generate locator boilerplate
+
+## Reporting
+- Use pytest-html for local HTML reports (--html=report.html --self-contained-html)
+- Use Allure reporting (allure-pytest) for detailed step-level reports in CI
+- Attach screenshots and traces to Allure reports on failure
+
+## CI/CD Integration
+- Run headless (default) in CI; no DISPLAY or Xvfb required
+- Cache playwright install (browsers) between CI runs using the Playwright version as cache key
+- Install system dependencies with playwright install-deps before first run
+- Use --browser chromium for faster CI runs unless cross-browser coverage is required
+
+## Code Quality
+- Format with black and sort imports with isort
+- Lint with flake8 or ruff
+- Type-check with mypy (strict mode recommended for page object layer)
+- Gate merges on pytest --tb=short -q passing in CI
+
+## Documentation
+- Add docstrings to BasePage methods and public page object actions
+- Maintain a README with setup steps, browser install command, and how to run
+- Document custom markers in pytest.ini or pyproject.toml [tool.pytest.ini_options]
+
+Remember to exploit Playwright's auto-waiting, network interception, and tracing capabilities to write fast, flake-resistant Python tests.
