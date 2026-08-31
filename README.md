@@ -26,6 +26,7 @@ awesome-cursorrules/
 ├── 📚 rules/                       # Legacy .cursorrules files (migration source)
 │   ├── appium-mobile-test-automation-framework/
 │   ├── cypress-javascript-test-automation-framework/
+│   ├── jest-javascript-unit-test-framework/
 │   ├── k6-performance-test-framework/
 │   ├── playwright-javascript-test-automation-framework/
 │   ├── restassured-java-framework/

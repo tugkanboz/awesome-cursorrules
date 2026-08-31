@@ -1,0 +1,115 @@
+# Project: Jest JavaScript Unit Test Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript/TypeScript projects
+- Organize tests in __tests__ directories or co-locate with source files using .test.js/.spec.js suffix
+- Use TypeScript with ts-jest or Babel for transpilation
+- Configure jest.config.js (or jest.config.ts) as the single source of truth for test settings
+- Leverage Jest's built-in code coverage, mocking, and snapshot capabilities
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices
+- Use meaningful, descriptive test and variable names
+- Implement clean code principles
+- Limit describe block nesting to 3 levels maximum
+- Keep each test file focused on a single module or component
+- Prefer async/await over Promise chains in asynchronous tests
+
+## Test Organization
+- Group related tests using describe blocks
+- Use it/test functions for individual test cases
+- Implement beforeEach/afterEach for per-test setup and teardown
+- Use beforeAll/afterAll only for expensive shared resources that are truly read-only
+- Separate unit, integration, and e2e tests into distinct directories
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern consistently
+- Write focused, single-responsibility tests
+- Avoid test interdependencies and shared mutable state between tests
+- Use jest.fn() for creating mock functions
+- Clear or reset mocks in afterEach to prevent cross-test pollution
+- Prefer toEqual for deep equality checks over toBe for objects
+- Prefer explicit assertions over implicit pass-by-not-throwing
+
+## Mocking Strategies
+- Use jest.mock() for module-level mocking with automatic hoisting
+- Implement jest.spyOn() for method-level spying without replacing the full module
+- Use jest.useFakeTimers() with modern mode for timer-dependent tests
+- Mock HTTP requests with msw (Mock Service Worker) for realistic network simulation
+- Use manual mocks in __mocks__ directories for complex or frequently used modules
+- Restore all mocks after each test with jest.restoreAllMocks() or clearMocks: true in config
+
+## Assertions
+- Use expect() with specific, descriptive matchers
+- Implement custom matchers with expect.extend() for domain-specific assertions
+- Use toMatchSnapshot() only for stable, intentional snapshot testing
+- Use expect.assertions(n) in async tests to ensure all assertions run
+- Prefer specific matchers (toHaveBeenCalledWith) over generic ones (toBeTruthy)
+- Use toThrow and toThrowError with specific error messages or types
+
+## Coverage
+- Configure coverage with the v8 provider (recommended for accuracy) via coverageProvider
+- Set meaningful thresholds in coverageThreshold for statements, branches, functions, and lines
+- Use collectCoverageFrom to include all source files, not just tested ones
+- Exclude generated files, configuration, and index barrel files from coverage
+- Generate lcov reports for CI integration and HTML reports for local review
+- Run coverage in CI but not in watch mode to keep local feedback fast
+
+## Performance
+- Use --runInBand only for debugging; prefer parallel workers in CI
+- Configure maxWorkers in jest.config to balance CPU usage in CI environments
+- Use testPathPattern or testNamePattern to run targeted subsets during development
+- Use jest --onlyFailures (or -f) to rerun only failing tests during development
+- Use --bail to stop early on first failure in pre-commit hooks
+- Minimize unnecessary setup/teardown operations to reduce suite runtime
+
+## Snapshot Testing
+- Keep snapshots small and focused on the critical output structure
+- Commit snapshots to version control alongside their test files
+- Update snapshots deliberately with jest --updateSnapshot (-u) after intentional changes
+- Use inline snapshots (toMatchInlineSnapshot) for small, readable, self-documenting outputs
+- Avoid snapshotting highly dynamic content (timestamps, random IDs)
+- Delete obsolete snapshots with --ci flag to prevent stale files from accumulating
+
+## Test Data Management
+- Use factory functions or fixtures for reusable, composable test data
+- Define TypeScript types or JSDoc types for all test data structures
+- Avoid hardcoded magic values; use named constants or enums
+- Generate realistic dynamic data with @faker-js/faker when needed
+- Keep test data close to the test that uses it; share only when truly common
+
+## Configuration
+- Use jest.config.js (or .ts) for maintainability over package.json config
+- Configure moduleNameMapper for path aliases and static asset mocking
+- Use projects in jest.config.js to run multiple configurations (e.g., unit vs. integration)
+- Set testEnvironment to node for backend code and jsdom for browser/DOM code
+- Use globalSetup and globalTeardown for one-time infrastructure setup (databases, servers)
+
+## CI/CD Integration
+- Use --ci flag in CI environments to disable interactive prompts and fail on missing snapshots
+- Configure --reporters with jest-junit for JUnit XML output for CI pipeline compatibility
+- Enable test result caching with --cache for faster repeated runs
+- Upload coverage reports to services like Codecov or SonarCloud
+- Run tests with --forceExit if integration tests may leave open handles
+- Run linting and type-checking in parallel with the test suite, not sequentially
+
+## TypeScript Integration
+- Use ts-jest or @swc/jest for TypeScript transpilation in Jest
+- Configure paths in tsconfig to match moduleNameMapper in jest.config
+- Enable diagnostics: false in ts-jest config only when TS errors are handled elsewhere
+- Keep a dedicated tsconfig.test.json for test-specific TypeScript settings
+
+## Error Handling
+- Test both success and failure code paths explicitly
+- Assert on specific error messages and types using toThrow and toThrowError
+- Use expect(fn).rejects.toThrow() for async error assertions
+- Use expect.assertions(n) in async tests to catch silent resolution instead of rejection
+- Verify error boundaries and fallback behavior in component tests
+
+## Documentation
+- Document complex test scenarios with brief inline comments explaining the why
+- Maintain a TESTING.md describing conventions, patterns, and how to run tests
+- Include examples for any custom matchers defined in the project
+- Document project-specific mock strategies and shared fixture patterns
+
+Remember to keep tests fast, deterministic, and independent — and leverage Jest's rich ecosystem of plugins and its deep integration with Babel and TypeScript toolchains for a reliable unit testing experience.
