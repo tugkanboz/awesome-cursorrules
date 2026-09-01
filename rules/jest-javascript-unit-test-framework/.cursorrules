@@ -1,0 +1,154 @@
+# Project: Jest JavaScript/TypeScript Unit Test Framework
+
+## Framework Structure
+- Use Jest as the primary test runner for JavaScript and TypeScript projects
+- Organize tests in `__tests__/` directories alongside source files, or in a top-level `tests/` directory
+- Use TypeScript with ts-jest or Babel for transpilation to enable type-safe tests
+- Separate unit, integration, and snapshot tests into distinct directories or with naming conventions
+
+## Coding Standards
+- Follow ESLint and Prettier standards across all test files
+- Use meaningful, descriptive test names: `it('should return null when user is not authenticated')`
+- Keep test files focused — one test file per source module
+- Avoid testing implementation details; test observable behaviour instead
+
+## Test Organization
+- Group related tests using `describe` blocks; limit nesting to two or three levels
+- Use `it` (or `test`) for individual assertions — prefer `it` for readability
+- Place shared setup inside `beforeEach`/`afterEach`; use `beforeAll`/`afterAll` only for expensive, stateless resources
+- Co-locate test utilities and fixtures in a `__tests__/helpers/` or `tests/utils/` directory
+
+## Best Practices
+- Follow the Arrange-Act-Assert (AAA) pattern in every test
+- Write one logical assertion group per test; avoid testing multiple unrelated behaviours in a single `it`
+- Keep tests independent — each test must pass when run alone or in any order
+- Use `expect.assertions(n)` in async tests to guard against silent failures
+- Avoid `done` callbacks; use `async/await` or return a Promise instead
+
+## Mocking Strategies
+- Use `jest.fn()` for simple function mocks and `jest.spyOn()` for spying on real implementations
+- Mock modules with `jest.mock('<module>')` at the top of the file (Jest hoists these automatically)
+- Use manual mocks in `__mocks__/` directories for complex or frequently reused module fakes
+- Reset mocks between tests with `jest.clearAllMocks()` in `beforeEach` or set `clearMocks: true` in config
+- Prefer `jest.spyOn` + `.mockRestore()` over permanent module replacement when the real implementation is needed elsewhere
+
+## Assertions
+- Use specific matchers: `toEqual`, `toStrictEqual`, `toContain`, `toHaveBeenCalledWith`, `toThrow`
+- Use `toEqual` for deep equality of objects/arrays; use `toBe` only for primitives and reference equality
+- Assert on error type and message: `expect(() => fn()).toThrow(TypeError)`
+- Use `toMatchInlineSnapshot` for short, stable outputs; `toMatchSnapshot` for larger outputs stored in files
+
+## Async Testing
+```javascript
+// ✅ async/await — preferred style
+it('should fetch user data', async () => {
+  const user = await fetchUser(1)
+  expect(user).toEqual({ id: 1, name: 'Alice' })
+})
+
+// ✅ Return a Promise when async/await is not available
+it('should resolve with data', () => {
+  return expect(fetchUser(1)).resolves.toMatchObject({ id: 1 })
+})
+
+// ✅ Guard against false positives in async tests
+it('should reject on invalid id', async () => {
+  expect.assertions(1)
+  await expect(fetchUser(-1)).rejects.toThrow('Invalid ID')
+})
+```
+
+## Mocking Example
+```javascript
+import { sendEmail } from '../email'
+import { notifyUser } from '../notifications'
+
+jest.mock('../email')
+
+describe('notifyUser', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('should call sendEmail with the correct arguments', async () => {
+    sendEmail.mockResolvedValueOnce({ status: 'sent' })
+
+    await notifyUser({ id: 1, email: 'alice@example.com' }, 'Welcome!')
+
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(sendEmail).toHaveBeenCalledWith({
+      to: 'alice@example.com',
+      subject: 'Welcome!',
+    })
+  })
+})
+```
+
+## Parametrized Tests
+```javascript
+describe('formatCurrency', () => {
+  it.each([
+    [1000, 'USD', '$1,000.00'],
+    [0,    'EUR', '€0.00'],
+    [-50,  'GBP', '-£50.00'],
+  ])('formatCurrency(%d, %s) === %s', (amount, currency, expected) => {
+    expect(formatCurrency(amount, currency)).toBe(expected)
+  })
+})
+```
+
+## Coverage
+- Collect coverage with `--coverage`; configure thresholds in `jest.config.js` under `coverageThreshold`
+- Use `v8` coverage provider for accurate branch coverage in modern Node.js projects
+- Exclude generated files, migration scripts, and `index.ts` re-exports via `coveragePathIgnorePatterns`
+- Upload coverage reports to Codecov or similar services in CI
+
+## Configuration (jest.config.js)
+```javascript
+/** @type {import('jest').Config} */
+const config = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',        // use 'jsdom' for React/browser code
+  clearMocks: true,
+  collectCoverageFrom: ['src/**/*.{ts,js}', '!src/**/*.d.ts'],
+  coverageThreshold: {
+    global: { branches: 80, functions: 80, lines: 80, statements: 80 },
+  },
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',  // resolve path aliases
+  },
+}
+
+module.exports = config
+```
+
+## Performance
+- Use `--runInBand` in CI only when tests share global state that prevents parallelism
+- Enable worker threads via `--workerThreads` (Jest 29+) for faster parallel execution
+- Use `jest --onlyFailures` during local debugging to re-run only failing tests
+- Cache transformed files with `transform` and the default Jest cache (`--cache`)
+
+## React / jsdom Testing
+- Set `testEnvironment: 'jsdom'` for component tests
+- Use `@testing-library/react` and `@testing-library/user-event` for user-centric assertions
+- Wrap async state updates in `act()` or use `waitFor` from Testing Library
+- Clean up after each test automatically with `@testing-library/jest-dom/extend-expect`
+
+## CI/CD Integration
+- Add `--ci` flag in CI to fail on new snapshots and disable interactive prompts
+- Use `--reporters=default --reporters=jest-junit` for JUnit XML output compatible with CI platforms
+- Run `jest --passWithNoTests` only when the test suite is intentionally empty; otherwise, fail on empty suites
+- Cache `node_modules` and the Jest cache directory between CI runs to reduce build times
+
+## Error Handling Tests
+- Test both success and error paths for every public function
+- Use `jest.spyOn(console, 'error').mockImplementation(() => {})` to suppress expected console errors in tests
+- Restore spies with `.mockRestore()` in `afterEach` to avoid pollution between tests
+
+## Documentation
+- Add a brief `describe` block description when the scope is not obvious from the file name
+- Keep a `tests/README.md` explaining folder conventions, helper utilities, and how to run tests locally
+- Document non-obvious mock strategies with a short inline comment
+
+Remember to run `jest --watch` during development for instant feedback, and keep individual test files under 200 lines to maintain readability.
