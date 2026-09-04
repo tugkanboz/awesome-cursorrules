@@ -1,0 +1,161 @@
+# Project: pytest Python Test Framework
+
+## Framework Structure
+- Use pytest as the primary test runner for Python projects
+- Organise tests in a dedicated `tests/` directory mirroring the `src/` package structure
+- Use `conftest.py` files at the appropriate scope (root, package, or module) for shared fixtures
+- Separate unit, integration, and end-to-end tests into distinct subdirectories (`tests/unit/`, `tests/integration/`, `tests/e2e/`)
+
+## Coding Standards
+- Follow PEP 8 and use `ruff` or `flake8` for linting
+- Use `black` or `ruff format` for consistent code formatting
+- Use type annotations in all fixture and helper functions
+- Keep test functions concise; extract helpers to `conftest.py` or a `tests/helpers/` module
+
+## Test Organisation
+- Name test files with the `test_` prefix (e.g. `test_auth.py`)
+- Name test functions with the `test_` prefix and use descriptive names that read as requirements
+- Group related tests in classes prefixed with `Test` (no `__init__` needed)
+- Use `pytest.mark` for categorising tests (e.g. `@pytest.mark.smoke`, `@pytest.mark.slow`)
+
+## Best Practices
+- Follow the Arrange-Act-Assert (AAA) pattern with blank lines separating each phase
+- Write focused tests with a single responsibility and one reason to fail
+- Avoid shared mutable state between tests; rely on fixtures for setup and teardown
+- Prefer `assert` statements with descriptive failure messages over custom assertion helpers
+- Use `pytest.raises` for asserting exceptions and `pytest.warns` for warnings
+
+## Fixtures
+- Define fixtures in `conftest.py` at the narrowest applicable scope
+- Use appropriate fixture scopes: `function` (default), `class`, `module`, `package`, or `session`
+- Yield fixtures with `yield` for teardown instead of `return`; clean up resources in the `finally` block if needed
+- Parametrise fixtures with `@pytest.fixture(params=[...])` to run tests against multiple configurations
+
+```python
+# conftest.py
+import pytest
+from myapp import create_app, db as _db
+
+@pytest.fixture(scope="session")
+def app():
+    app = create_app({"TESTING": True, "DATABASE_URL": "sqlite:///:memory:"})
+    with app.app_context():
+        _db.create_all()
+        yield app
+        _db.drop_all()
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
+
+@pytest.fixture
+def db_session(app):
+    with app.app_context():
+        connection = _db.engine.connect()
+        transaction = connection.begin()
+        session = _db.Session(bind=connection)
+        yield session
+        transaction.rollback()
+        connection.close()
+```
+
+## Parametrisation
+- Use `@pytest.mark.parametrize` to cover multiple input/output combinations without duplicating test bodies
+- Provide `ids` for human-readable test names in parametrised cases
+- Combine `parametrize` with fixtures for data-driven integration tests
+
+```python
+@pytest.mark.parametrize(
+    ("email", "password", "expected_status"),
+    [
+        ("valid@example.com", "correct", 200),
+        ("valid@example.com", "wrong",   401),
+        ("",                  "correct", 422),
+    ],
+    ids=["valid-credentials", "wrong-password", "missing-email"],
+)
+def test_login(client, email, password, expected_status):
+    response = client.post("/login", json={"email": email, "password": password})
+    assert response.status_code == expected_status
+```
+
+## Mocking
+- Use `pytest-mock` (`mocker` fixture) for patching; prefer `mocker.patch` over `unittest.mock.patch`
+- Patch at the point of use, not where the object is defined
+- Use `mocker.spy` to verify calls without replacing behaviour
+- Reset mocks automatically via fixture scope; avoid manual `mock.reset_mock()` calls
+
+```python
+def test_send_email_calls_smtp(mocker):
+    mock_send = mocker.patch("myapp.email.smtp_send")
+    send_welcome_email("user@example.com")
+    mock_send.assert_called_once_with(
+        to="user@example.com", subject="Welcome", body=mocker.ANY
+    )
+```
+
+## Test Data Management
+- Use `factory_boy` or `polyfactory` for building test objects; keep factories in `tests/factories.py`
+- Use `faker` for generating realistic but random data
+- Store static fixture data (JSON, CSV, YAML) in `tests/data/` and load via a fixture
+- Never hardcode credentials or environment-specific values in test files; use environment variables or `pytest-dotenv`
+
+## Markers and Selection
+- Declare custom markers in `pytest.ini` / `pyproject.toml` to avoid `PytestUnknownMarkWarning`
+- Use `-m` flag for targeted runs: `pytest -m smoke`, `pytest -m "not slow"`
+- Use `-k` for keyword-based selection during development: `pytest -k "login"`
+- Mark flaky or external-dependency tests with `@pytest.mark.xfail(strict=False)` rather than skipping silently
+
+## Coverage
+- Integrate `pytest-cov` and configure it in `pyproject.toml` or `setup.cfg`
+- Set minimum branch coverage thresholds; fail the build if they are not met
+- Exclude generated code, migrations, and `conftest.py` from coverage reports
+- Generate HTML reports locally and upload XML/JSON reports in CI
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-branch --cov-report=term-missing --cov-fail-under=80"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+omit = ["*/migrations/*", "*/conftest.py"]
+```
+
+## Performance
+- Use `pytest-xdist` (`-n auto`) to run tests in parallel across CPU cores
+- Mark database-dependent tests as serial with `@pytest.mark.serial` when transaction isolation requires it
+- Scope expensive fixtures (`session` or `module`) to share setup cost across many tests
+- Use `pytest-benchmark` for micro-benchmark tests; keep them in a separate suite
+
+## Async Testing
+- Use `pytest-asyncio` for testing async code; set `asyncio_mode = "auto"` in config to avoid per-test decoration
+- Use `anyio` with `pytest-anyio` for backend-agnostic async tests
+- Mock async dependencies with `AsyncMock` from `unittest.mock`
+
+## CI/CD Integration
+- Run `pytest` with `--tb=short` in CI for concise tracebacks
+- Output JUnit XML with `--junitxml=reports/pytest.xml` for pipeline result publishing
+- Cache `.pytest_cache/` and the virtual environment between pipeline runs
+- Fail the pipeline on first error in fast feedback pipelines using `-x` or `--exitfirst`
+
+## Configuration Reference
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts   = "-ra -q --strict-markers"
+testpaths = ["tests"]
+markers   = [
+    "smoke: critical path tests run on every commit",
+    "slow: tests that take more than 1 second",
+    "integration: tests requiring external services",
+]
+```
+
+## Documentation
+- Document non-obvious fixture dependencies and parametrisation choices with inline comments
+- Maintain a `tests/README.md` explaining how to run each suite, required environment variables, and how to add new fixtures
+- Include `--co -q` (collect-only) output in the README for a quick overview of available tests
+
+Remember to keep tests fast, deterministic, and independent — a test that cannot be trusted is worse than no test at all.
