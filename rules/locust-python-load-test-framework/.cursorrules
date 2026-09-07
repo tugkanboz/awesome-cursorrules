@@ -1,0 +1,88 @@
+# Project: Locust Python Load Testing Framework
+
+## Project Structure
+- Organise locustfiles in a `locustfiles/` directory grouped by feature or service
+- Place shared utilities, tasks, and data helpers under `locustfiles/common/`
+- Use a single entry point `locustfile.py` at the project root for simple setups
+- Store environment-specific configuration in `config/` as YAML or `.env` files
+
+## Coding Standards
+- Follow PEP 8 style guidelines; enforce with ruff or flake8
+- Use type hints for all task functions and helper methods
+- Name task methods descriptively: `browse_product_catalogue`, `submit_checkout`
+- Keep individual task functions short and focused on one user action
+
+## User Definition
+- Subclass `HttpUser` (or `FastHttpUser` for high-throughput scenarios) for HTTP load tests
+- Define `wait_time` using `between(min, max)` for realistic think-time simulation
+- Override `on_start` for per-user setup (login, token retrieval) and `on_stop` for teardown
+- Group related tasks into `TaskSet` classes and reference them via `tasks` attribute
+
+## Task Organisation
+- Use `@task(weight)` to reflect realistic traffic distribution across endpoints
+- Break complex flows into reusable helper methods called from task functions
+- Use `SequentialTaskSet` for ordered user journeys that must execute step-by-step
+- Avoid shared mutable state between users; use instance variables on the `User` class
+
+## Load Shapes
+- Define custom load profiles by subclassing `LoadTestShape` and overriding `tick()`
+- Implement ramp-up, steady-state, and ramp-down phases in the shape class
+- Use `StepLoadShape` for staircase load patterns without custom code
+- Validate that the shape reflects production traffic patterns, not arbitrary spikes
+
+## Best Practices
+- Use `self.client.get/post` with `name=` parameter to group dynamic URLs in statistics
+- Always assert response status with `response.raise_for_status()` or explicit checks
+- Use `catch_response=True` context manager to mark failures on business-level checks
+- Avoid `time.sleep()` inside tasks; rely on `wait_time` for think-time simulation
+- Parameterise test data; never hardcode credentials or user-specific values in tasks
+
+## Data Management
+- Load test data from CSV or JSON files at module level using `locust.contrib.fasthttp`
+- Use `itertools.cycle` or a queue to distribute data across virtual users without repeats
+- Generate dynamic data with `faker` for fields that must be unique per request
+- Store sensitive credentials in environment variables, never in committed files
+
+## Distributed Execution
+- Run in distributed mode with one master and multiple worker processes: `locust --master` / `locust --worker`
+- Size workers based on available CPU cores; one worker per core is a reasonable baseline
+- Use `--expect-workers` on the master to delay test start until all workers connect
+- Deploy workers in containers (Docker / Kubernetes) for scalable cloud load generation
+
+## Metrics and Thresholds
+- Define pass/fail criteria programmatically in a `LoadTestShape` or via `--exit-code-on-error`
+- Track `response_times.percentile(95)` and `response_times.percentile(99)` for SLO validation
+- Monitor failure rate with `stats.total.fail_ratio`; fail the run if it exceeds the threshold
+- Export results with `--csv=results` for post-run trend analysis
+
+## Reporting
+- Use the built-in web UI (`--web-host`, `--web-port`) for real-time monitoring during runs
+- Generate HTML reports with `--html=report.html` for archiving and sharing results
+- Integrate with Grafana and InfluxDB via the `locust-influxdb-listener` plugin for dashboards
+- Store CSV output in CI artefacts for historical comparison across builds
+
+## CI/CD Integration
+- Run headless with `--headless -u <users> -r <spawn-rate> --run-time <duration>`
+- Set `--exit-code-on-error 1` so CI fails when Locust detects request failures
+- Separate smoke tests (low VU count, short duration) from full load tests in pipeline stages
+- Cache the virtual environment between runs to reduce pipeline startup time
+
+## Environment Configuration
+- Use environment variables or a config file to switch between test, staging, and production targets
+- Pass the target host via `--host` at runtime; never hardcode URLs inside locustfiles
+- Use `locust.env.host` inside tasks to construct endpoint URLs dynamically
+- Manage secrets with a vault tool (HashiCorp Vault, AWS Secrets Manager) in CI pipelines
+
+## Error Handling
+- Catch `ConnectionError` and `Timeout` exceptions in tasks and report them via `request_failure` event
+- Use `response.failure("reason")` inside `catch_response` blocks for application-level errors
+- Log unexpected failures with the Locust logger: `from locust import log; log.info(...)`
+- Implement retry logic only for idempotent GET requests and with a fixed maximum retry count
+
+## Documentation
+- Document each `User` class and `TaskSet` with a brief docstring describing the simulated persona
+- Maintain a `README.md` in `locustfiles/` explaining how to run, configure, and extend tests
+- Record baseline performance numbers and SLO targets alongside the locustfile they validate
+- Include example `docker-compose.yml` for reproducing distributed runs locally
+
+Remember to model realistic user behaviour and validate results against defined SLOs rather than chasing raw throughput numbers.
