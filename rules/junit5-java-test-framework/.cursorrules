@@ -1,0 +1,102 @@
+# Project: JUnit 5 Java Test Framework
+
+## Framework Structure
+- Use JUnit 5 (JUnit Jupiter) as the primary test runner for Java projects
+- Manage dependencies with Maven or Gradle; prefer JUnit BOM for version alignment
+- Organize tests under src/test/java mirroring the main source package structure
+- Separate unit, integration, and system tests into distinct source sets or packages
+
+## Coding Standards
+- Follow Java naming conventions: test method names use should_doSomething_when_condition
+- Use @DisplayName with plain-language descriptions for readable test output
+- Apply final on test classes that should not be extended
+- Limit test class size; split large classes by behaviour group, not alphabetically
+
+## Test Organization
+- Use @Nested inner classes to group related test cases and share setup within a class
+- Use @Tag("unit"), @Tag("integration") etc. for cross-cutting categorization
+- Register custom tags in junit-platform.properties to prevent unrecognized-tag warnings
+- Keep test helper utilities in a dedicated src/test/java/support package
+
+## Lifecycle and Setup
+- Use @BeforeEach / @AfterEach for per-test setup and teardown
+- Use @BeforeAll / @AfterAll (static) for expensive one-time setup (database, containers)
+- Prefer @TestInstance(Lifecycle.PER_CLASS) when sharing state across tests is intentional
+- Implement TestExecutionListener for cross-cutting concerns (logging, metrics)
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern in every test method
+- Write single-responsibility tests: assert one logical outcome per test
+- Keep tests independent; never rely on execution order or shared mutable state
+- Use @Disabled with a reason and a tracking link, never silently skip tests
+- Avoid catching exceptions in tests; use assertThrows instead
+
+## Assertions
+- Use org.junit.jupiter.api.Assertions for standard checks
+- Use assertAll() to group related assertions and report all failures at once
+- Use assertThrows() and assertDoesNotThrow() for exception path testing
+- Use assertTimeout() / assertTimeoutPreemptively() for time-sensitive assertions
+- Consider AssertJ as an alternative for fluent, readable assertion chains
+
+## Parameterized Tests
+- Use @ParameterizedTest with appropriate source annotations:
+  - @ValueSource for simple scalar inputs
+  - @CsvSource / @CsvFileSource for tabular data
+  - @MethodSource for complex object arguments from a static factory method
+  - @EnumSource to exercise all enum values
+- Provide a meaningful name attribute on @ParameterizedTest for readable output
+
+## Extensions
+- Use @ExtendWith to register JUnit 5 extensions (MockitoExtension, SpringExtension)
+- Implement Extension interfaces (BeforeEachCallback, ParameterResolver) for reusable behaviours
+- Register global extensions via ServiceLoader in META-INF/services for project-wide defaults
+- Avoid mixing JUnit 4 @RunWith with JUnit 5 — use @ExtendWith exclusively
+
+## Mocking
+- Use Mockito with @ExtendWith(MockitoExtension.class) for automatic mock lifecycle
+- Use @Mock, @InjectMocks, and @Spy annotations instead of manual Mockito.mock() calls
+- Verify interactions with verify() and verifyNoMoreInteractions() where meaningful
+- Use ArgumentCaptor to assert on complex arguments passed to mocked methods
+
+## Test Data Management
+- Use factory methods or builder patterns to construct test objects
+- Store shared test fixtures as static final constants or provide them via @MethodSource
+- Use Faker or EasyRandom for generating realistic random domain objects
+- Keep test data out of production code; never commit sensitive values
+
+## Integration Testing
+- Use Testcontainers for database, message broker, and external service dependencies
+- Annotate slow integration tests with @Tag("integration") and exclude from fast builds
+- Reset database state between tests with @Transactional rollback or container resets
+- Use WireMock for HTTP dependency stubbing in integration tests
+
+## Coverage
+- Configure JaCoCo for coverage measurement in Maven (jacoco-maven-plugin) or Gradle
+- Set minimum line/branch coverage thresholds to fail the build on regressions
+- Exclude generated code, DTOs, and configuration classes from coverage requirements
+- Publish HTML reports as CI artifacts for visual review
+
+## Performance
+- Use @Timeout at the method or class level to guard against runaway tests
+- Run independent tests in parallel: set junit.jupiter.execution.parallel.enabled=true
+- Configure parallelism mode (same_thread, concurrent) per class with @Execution
+- Profile test suite duration with --details=verbose to find slow outliers
+
+## CI/CD Integration
+- Use the Maven Surefire Plugin (3.x) or Gradle JUnit Platform support for test execution
+- Generate Surefire XML reports for CI test result parsing
+- Fail fast on first failure with -Dsurefire.failIfNoSpecifiedTests=false in PR pipelines
+- Cache ~/.m2 or Gradle caches between CI runs to speed up dependency resolution
+
+## Configuration
+- Centralise JUnit Platform settings in src/test/resources/junit-platform.properties
+- Use junit.jupiter.testmethod.order.default=MethodOrderer$DisplayName for stable ordering
+- Enable parallel execution and configure pool size in junit-platform.properties
+- Use Maven profiles or Gradle test tasks to toggle tag-based test subsets
+
+## Documentation
+- Add a brief Javadoc comment on complex test methods explaining the scenario
+- Maintain a tests/README.md covering how to run subsets, custom tags, and integration tests
+- Document custom extensions and their purpose in the support package
+
+Remember to leverage JUnit 5's powerful extension model and native parameterization support for clean, expressive, and maintainable Java test suites.
