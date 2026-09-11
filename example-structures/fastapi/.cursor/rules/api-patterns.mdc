@@ -1,0 +1,354 @@
+---
+description: FastAPI Python backend patterns — Pydantic v2 models, async routes, dependency injection, JWT auth, and testing
+globs: **/*.py,**/routers/**/*.py,**/models/**/*.py,**/schemas/**/*.py,**/dependencies/**/*.py
+alwaysApply: false
+---
+# FastAPI Python API Excellence
+
+## Project Structure
+```
+app/
+├── main.py                  # FastAPI app, middleware, router registration
+├── config.py                # Settings via pydantic-settings
+├── dependencies.py          # Shared dependencies (auth, db session)
+├── routers/
+│   ├── users.py
+│   └── items.py
+├── models/                  # SQLAlchemy ORM models
+│   └── user.py
+├── schemas/                 # Pydantic request/response schemas
+│   └── user.py
+├── crud/                    # Database operations, decoupled from routes
+│   └── user.py
+└── tests/
+    ├── conftest.py
+    └── test_users.py
+```
+
+## Application Setup & Configuration
+```python
+# config.py — all settings via environment variables
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
+
+    app_name: str = "My API"
+    debug: bool = False
+    database_url: str
+    secret_key: str
+    access_token_expire_minutes: int = 30
+
+settings = Settings()
+```
+
+```python
+# main.py
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .config import settings
+from .database import engine, Base
+from .routers import users, items
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: create tables, warm caches, etc.
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # Shutdown: close connections, flush buffers
+    await engine.dispose()
+
+app = FastAPI(
+    title=settings.app_name,
+    debug=settings.debug,
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(users.router, prefix="/api/v1")
+app.include_router(items.router, prefix="/api/v1")
+```
+
+## Pydantic v2 Schemas
+```python
+# schemas/user.py
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
+class UserBase(BaseModel):
+    email: EmailStr
+    full_name: str = Field(..., min_length=2, max_length=100)
+
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=8)
+    password_confirm: str
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "UserCreate":
+        if self.password != self.password_confirm:
+            raise ValueError("Passwords do not match")
+        return self
+
+class UserUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=100)
+    email: EmailStr | None = None
+
+class UserOut(UserBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+class UserList(BaseModel):
+    items: list[UserOut]
+    total: int
+    page: int
+    size: int
+```
+
+## Dependency Injection
+```python
+# dependencies.py
+from typing import Annotated
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .config import settings
+from .database import get_db
+from .crud.user import get_user_by_id
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+
+# ✅ Reusable db dependency
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: DbSession,
+):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        user_id: int | None = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = await get_user_by_id(db, user_id=int(user_id))
+    if user is None:
+        raise credentials_exception
+    return user
+
+# ✅ Type alias — cleaner route signatures
+CurrentUser = Annotated[object, Depends(get_current_user)]
+```
+
+## Async Route Patterns
+```python
+# routers/users.py
+from fastapi import APIRouter, HTTPException, Query, status
+from typing import Annotated
+
+from ..dependencies import DbSession, CurrentUser
+from ..schemas.user import UserCreate, UserOut, UserList, UserUpdate
+from ..crud import user as crud
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+@router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def create_user(user_in: UserCreate, db: DbSession):
+    existing = await crud.get_user_by_email(db, email=user_in.email)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists",
+        )
+    return await crud.create_user(db, user_in=user_in)
+
+@router.get("/me", response_model=UserOut)
+async def get_me(current_user: CurrentUser):
+    return current_user
+
+@router.get("/", response_model=UserList)
+async def list_users(
+    db: DbSession,
+    _: CurrentUser,  # auth guard
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    skip = (page - 1) * size
+    users, total = await crud.list_users(db, skip=skip, limit=size)
+    return UserList(items=users, total=total, page=page, size=size)
+
+@router.get("/{user_id}", response_model=UserOut)
+async def get_user(user_id: int, db: DbSession, _: CurrentUser):
+    user = await crud.get_user_by_id(db, user_id=user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+
+@router.patch("/{user_id}", response_model=UserOut)
+async def update_user(
+    user_id: int,
+    user_in: UserUpdate,
+    db: DbSession,
+    current_user: CurrentUser,
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+    user = await crud.get_user_by_id(db, user_id=user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return await crud.update_user(db, user=user, user_in=user_in)
+```
+
+## CRUD Layer (Decoupled from Routes)
+```python
+# crud/user.py
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from passlib.context import CryptContext
+
+from ..models.user import User
+from ..schemas.user import UserCreate, UserUpdate
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+    result = await db.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+async def list_users(
+    db: AsyncSession, skip: int = 0, limit: int = 20
+) -> tuple[list[User], int]:
+    count_result = await db.execute(select(func.count(User.id)))
+    total = count_result.scalar_one()
+
+    result = await db.execute(select(User).offset(skip).limit(limit))
+    users = result.scalars().all()
+
+    return list(users), total
+
+async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
+    hashed_password = pwd_context.hash(user_in.password)
+    user = User(
+        email=user_in.email,
+        full_name=user_in.full_name,
+        hashed_password=hashed_password,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User:
+    update_data = user_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(user, field, value)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+```
+
+## Testing with pytest + httpx
+```python
+# tests/conftest.py
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+from app.main import app
+from app.database import Base, get_db
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+@pytest_asyncio.fixture(scope="session")
+async def engine():
+    engine = create_async_engine(TEST_DATABASE_URL)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    await engine.dispose()
+
+@pytest_asyncio.fixture
+async def db(engine):
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+    async with async_session() as session:
+        yield session
+        await session.rollback()
+
+@pytest_asyncio.fixture
+async def client(db):
+    app.dependency_overrides[get_db] = lambda: db
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()
+```
+
+```python
+# tests/test_users.py
+import pytest
+
+@pytest.mark.asyncio
+async def test_create_user(client):
+    response = await client.post("/api/v1/users/", json={
+        "email": "test@example.com",
+        "full_name": "Test User",
+        "password": "SecurePass1",
+        "password_confirm": "SecurePass1",
+    })
+    assert response.status_code == 201
+    data = response.json()
+    assert data["email"] == "test@example.com"
+    assert "id" in data
+    assert "hashed_password" not in data
+
+@pytest.mark.asyncio
+async def test_create_user_duplicate_email(client):
+    payload = {
+        "email": "dup@example.com",
+        "full_name": "Dup User",
+        "password": "SecurePass1",
+        "password_confirm": "SecurePass1",
+    }
+    await client.post("/api/v1/users/", json=payload)
+    response = await client.post("/api/v1/users/", json=payload)
+    assert response.status_code == 409
+
+@pytest.mark.asyncio
+async def test_get_user_not_found(client):
+    response = await client.get("/api/v1/users/99999")
+    assert response.status_code == 404
+```
+
+## Key Principles
+- **Always use `async def`** for route handlers and CRUD functions; use `asyncio.to_thread` for blocking calls
+- **Pydantic v2**: prefer `model_dump(exclude_unset=True)` for partial updates; use `model_config = {"from_attributes": True}` on output schemas
+- **Dependency Injection**: keep routes thin; push business logic into CRUD or service layers
+- **Annotated dependencies**: use `Annotated[Type, Depends(...)]` type aliases to reduce boilerplate in route signatures
+- **HTTP status codes**: return `201` for creation, `204` for deletion (no body), `409` for conflicts, `403` for permission errors
+- **Never expose internal fields** (e.g. `hashed_password`) in response schemas; define separate `Out` schemas
+- **lifespan context manager**: prefer over deprecated `on_startup`/`on_shutdown` event handlers
