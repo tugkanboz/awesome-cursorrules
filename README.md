@@ -31,7 +31,8 @@ awesome-cursorrules/
 │   ├── restassured-java-framework/
 │   ├── selenium-net-test-automation-framework/
 │   ├── selenium-python-test-automation-framework/
-│   └── vitest-javascript-unit-test-framework/
+│   ├── vitest-javascript-unit-test-framework/
+│   └── webdriverio-javascript-test-automation-framework/
 ├── 🏗️ frameworks/                  # Framework .cursor/rules examples (with nested rules)
 │   ├── cypress/                    # .cursor/rules/{core,patterns}/*.mdc
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
@@ -39,7 +40,8 @@ awesome-cursorrules/
 │   ├── cypress/                    # testing-fundamentals, api-testing
 │   ├── next-js/                    # app-router-patterns
 │   ├── react-typescript/           # component-development
-│   └── selenium-python/            # architecture, page-objects, test-patterns
+│   ├── selenium-python/            # architecture, page-objects, test-patterns
+│   └── vitest/                     # unit-testing-patterns
 └── 📖 legacy-migration/            # Before/after migration guides
 ```
 
@@ -456,6 +458,7 @@ Infrastructure that grows from individual projects to enterprise-scale monorepos
 - **[🌐 Cypress Testing](./example-structures/cypress/.cursor/rules/)** - E2E testing excellence
 - **[⚛️ React TypeScript](./example-structures/react-typescript/.cursor/rules/)** - Modern component development
 - **[▲ Next.js App Router](./example-structures/next-js/.cursor/rules/)** - Server Components, Route Handlers, Server Actions, and metadata API
+- **[⚡ Vitest](./example-structures/vitest/.cursor/rules/)** - Unit testing patterns, mocking, and coverage for Vite-native projects
 
 ### 🎓 **Learning Resources**
 - **[📖 Official Documentation](https://cursor.com/docs/context/rules)** - Cursor Rules comprehensive guide
