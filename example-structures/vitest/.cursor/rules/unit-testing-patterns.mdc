@@ -1,0 +1,295 @@
+---
+description: Vitest unit testing patterns — test organization, mocking with vi, async assertions, component testing, and coverage configuration for Vite-native projects
+globs: **/*.test.ts,**/*.test.tsx,**/*.test.js,**/*.spec.ts,**/*.spec.tsx,**/*.spec.js,**/vitest.config.*,**/vitest.setup.*
+alwaysApply: false
+---
+# Vitest Testing Excellence
+
+## Test Structure: Arrange-Act-Assert
+
+Always follow the AAA pattern. Each `it` block tests exactly one behaviour.
+
+```typescript
+// ✅ Clear AAA structure
+// src/utils/currency.test.ts
+import { describe, it, expect } from 'vitest'
+import { formatCurrency } from './currency'
+
+describe('formatCurrency', () => {
+  it('formats positive amounts with two decimal places', () => {
+    // Arrange
+    const amount = 1234.5
+
+    // Act
+    const result = formatCurrency(amount, 'USD')
+
+    // Assert
+    expect(result).toBe('$1,234.50')
+  })
+
+  it('formats zero as $0.00', () => {
+    expect(formatCurrency(0, 'USD')).toBe('$0.00')
+  })
+
+  it('throws for negative amounts', () => {
+    expect(() => formatCurrency(-1, 'USD')).toThrowError('Amount must be non-negative')
+  })
+})
+```
+
+## Mocking with vi
+
+```typescript
+// ✅ Module-level mock — hoisted automatically before imports
+// src/services/user.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { getUser } from './user'
+import { db } from '../lib/db'
+
+vi.mock('../lib/db', () => ({
+  db: {
+    user: {
+      findUnique: vi.fn(),
+    },
+  },
+}))
+
+describe('getUser', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns the user when found', async () => {
+    const mockUser = { id: '1', name: 'Alice', email: 'alice@example.com' }
+    vi.mocked(db.user.findUnique).mockResolvedValue(mockUser)
+
+    const user = await getUser('1')
+
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { id: '1' } })
+    expect(user).toEqual(mockUser)
+  })
+
+  it('returns null when user is not found', async () => {
+    vi.mocked(db.user.findUnique).mockResolvedValue(null)
+
+    const user = await getUser('missing-id')
+
+    expect(user).toBeNull()
+  })
+})
+
+// ✅ Spy on a method without fully mocking the module
+import { vi, expect } from 'vitest'
+import * as analytics from './analytics'
+
+const trackSpy = vi.spyOn(analytics, 'track')
+
+// after assertions:
+trackSpy.mockRestore()
+```
+
+## Mocking Timers and Dates
+
+```typescript
+// ✅ Fake timers for debounce / throttle / setTimeout
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { debounce } from './debounce'
+
+describe('debounce', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('calls the function once after the delay', () => {
+    const fn = vi.fn()
+    const debounced = debounce(fn, 300)
+
+    debounced()
+    debounced()
+    debounced()
+
+    expect(fn).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(300)
+
+    expect(fn).toHaveBeenCalledOnce()
+  })
+})
+
+// ✅ Fake the system date
+vi.setSystemTime(new Date('2024-01-15T12:00:00Z'))
+// ... test date-sensitive code ...
+vi.useRealTimers()
+```
+
+## Async Testing
+
+```typescript
+// ✅ Async/await with rejects — always await the assertion
+import { describe, it, expect } from 'vitest'
+import { fetchProduct } from './api'
+
+describe('fetchProduct', () => {
+  it('resolves with the product data', async () => {
+    const product = await fetchProduct('prod-123')
+    expect(product).toMatchObject({ id: 'prod-123', name: expect.any(String) })
+  })
+
+  it('rejects with a 404 error for unknown products', async () => {
+    await expect(fetchProduct('unknown')).rejects.toThrow('Product not found')
+  })
+})
+
+// ✅ Mock HTTP with msw — preferred over fetch mocks for integration tests
+// src/mocks/handlers.ts
+import { http, HttpResponse } from 'msw'
+
+export const handlers = [
+  http.get('/api/products/:id', ({ params }) => {
+    if (params.id === 'prod-123') {
+      return HttpResponse.json({ id: 'prod-123', name: 'Widget' })
+    }
+    return new HttpResponse(null, { status: 404 })
+  }),
+]
+
+// vitest.setup.ts
+import { setupServer } from 'msw/node'
+import { handlers } from './src/mocks/handlers'
+
+const server = setupServer(...handlers)
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())
+```
+
+## Component Testing with Testing Library
+
+```typescript
+// ✅ React component — user-centric assertions, no implementation details
+// src/components/Counter.test.tsx
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { Counter } from './Counter'
+
+describe('Counter', () => {
+  it('starts at zero and increments on button click', async () => {
+    const user = userEvent.setup()
+    render(<Counter />)
+
+    expect(screen.getByText('Count: 0')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /increment/i }))
+
+    expect(screen.getByText('Count: 1')).toBeInTheDocument()
+  })
+
+  it('calls onCountChange with the new value after each click', async () => {
+    const onCountChange = vi.fn()
+    const user = userEvent.setup()
+    render(<Counter onCountChange={onCountChange} />)
+
+    await user.click(screen.getByRole('button', { name: /increment/i }))
+
+    expect(onCountChange).toHaveBeenCalledWith(1)
+  })
+})
+```
+
+## Snapshot Testing
+
+```typescript
+// ✅ Use snapshots only for stable, presentational output
+import { describe, it, expect } from 'vitest'
+import { render } from '@testing-library/react'
+import { Badge } from './Badge'
+
+describe('Badge', () => {
+  it('renders the success variant correctly', () => {
+    const { container } = render(<Badge variant="success">Approved</Badge>)
+    expect(container.firstChild).toMatchSnapshot()
+  })
+})
+
+// ✅ Inline snapshots for small values — easier to review in PRs
+it('serialises a user record', () => {
+  expect(serializeUser({ id: '1', name: 'Alice' })).toMatchInlineSnapshot(`
+    "{"id":"1","name":"Alice"}"
+  `)
+})
+```
+
+## Coverage Configuration
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov'],
+      exclude: [
+        'node_modules/',
+        'dist/',
+        '**/*.d.ts',
+        '**/*.config.*',
+        '**/mocks/**',
+        'src/main.tsx',
+      ],
+      thresholds: {
+        statements: 80,
+        branches: 75,
+        functions: 80,
+        lines: 80,
+      },
+    },
+  },
+})
+```
+
+## Parallel and Concurrent Tests
+
+```typescript
+// ✅ Use it.concurrent for independent, side-effect-free tests
+describe('pure utility functions', () => {
+  it.concurrent('slugify converts spaces to hyphens', async () => {
+    expect(slugify('Hello World')).toBe('hello-world')
+  })
+
+  it.concurrent('slugify trims leading and trailing hyphens', async () => {
+    expect(slugify('  hello  ')).toBe('hello')
+  })
+
+  it.concurrent('slugify lowercases the result', async () => {
+    expect(slugify('UPPER')).toBe('upper')
+  })
+})
+
+// ✅ Run entire suites in parallel via describe.concurrent when there is no shared state
+describe.concurrent('math helpers', () => {
+  it('clamp keeps value within range', ({ expect }) => {
+    expect(clamp(5, 0, 10)).toBe(5)
+    expect(clamp(-1, 0, 10)).toBe(0)
+    expect(clamp(11, 0, 10)).toBe(10)
+  })
+})
+```
+
+## Key Rules
+
+- Always call `vi.clearAllMocks()` or `vi.restoreAllMocks()` in `beforeEach`/`afterEach` — stale mocks bleed between tests
+- Prefer `vi.mocked(fn)` over `(fn as Mock)` casts for type-safe mock access
+- Never share mutable state between test files; each file runs in its own isolated module scope
+- Use `expect.assertions(n)` in async tests that rely on thrown errors to catch cases where the assertion is never reached
+- Prefer `toEqual` for deep object comparison; use `toBe` only for primitives and reference equality
+- Keep `vi.mock()` calls at the top level of the file — Vitest hoists them before any imports
