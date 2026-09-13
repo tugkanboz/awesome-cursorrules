@@ -1,0 +1,96 @@
+# Project: Robot Framework Python Test Automation Framework
+
+## Framework Structure
+- Use Robot Framework with Python as the primary test automation platform
+- Implement keyword-driven and behavior-driven test design
+- Organise keywords, resources, and test suites in separate directories
+- Use SeleniumLibrary, RequestsLibrary, and other standard libraries
+- Configure pabot for parallel suite execution in CI environments
+
+## Coding Standards
+- Follow Robot Framework naming conventions: CamelCase for keywords, UPPER_CASE for variables
+- Use four-space indentation for all Robot Framework files
+- Maximum line length: 120 characters; use line continuation (...) for longer lines
+- Write keywords in plain English for readability by non-technical stakeholders
+- Prefix private or internal keywords with an underscore
+
+## Test Organisation
+- Separate resource files (.resource), variable files (.py/.yaml), and test suites (.robot)
+- Group test suites by feature or functional area in dedicated directories
+- Use Suite Setup/Teardown for environment-level preparation and cleanup
+- Use Test Setup/Teardown for test-level preparation and cleanup
+- Tag tests with meaningful labels (smoke, regression, feature:login) for selective execution
+
+## Best Practices
+- Follow the three-layer keyword design: business, navigation, and interaction layers
+- Keep test cases declarative and free of implementation details
+- One test case per scenario; avoid combining multiple scenarios in one test
+- Use Embedded Arguments syntax for natural-language keyword composition
+- Avoid hardcoded waits; use SeleniumLibrary's built-in wait conditions
+
+## Keyword Design
+- Write reusable keywords in .resource files, not directly in test suites
+- Keep each keyword focused on a single responsibility
+- Use meaningful documentation strings for every public keyword
+- Return values explicitly from keywords that produce output
+- Parametrise keywords to maximise reuse across different test scenarios
+
+## Variable Management
+- Define environment-agnostic defaults in a variables.yaml or variables.robot file
+- Override variables at runtime via --variable or --variablefile CLI flags
+- Use the OperatingSystem library to read environment variables at runtime
+- Store secrets in environment variables or a vault; never commit credentials
+- Use &{DICT} and @{LIST} variables for structured test data
+
+## Page Object / Resource Pattern
+- Create one .resource file per page or component
+- Define element locators as suite-level ${VARIABLES} at the top of each resource
+- Separate locator definitions from interaction keywords
+- Use data-testid attributes in selectors for stable, maintenance-friendly locators
+- Example resource file structure: Variables section → Keywords section
+
+## API Testing
+- Use RequestsLibrary for REST API automation alongside UI tests
+- Create dedicated API keyword libraries for service-layer validations
+- Validate response status codes, headers, and JSON body in separate keywords
+- Manage HTTP sessions with Create Session and Delete All Sessions in Setup/Teardown
+
+## Test Data Management
+- Use DataDriver library for data-driven testing from CSV, Excel, or YAML sources
+- Define test data in external files; avoid inline data in test cases
+- Generate dynamic test data with FakerLibrary or custom Python keywords
+- Clean up created test data via API calls or database teardown keywords
+
+## SeleniumLibrary Best Practices
+- Set implicit wait globally in Suite Setup; override locally only when necessary
+- Use Wait Until Element Is Visible / Wait Until Page Contains instead of Sleep
+- Capture a screenshot on failure using the built-in Capture Page Screenshot keyword
+- Run tests headless in CI with the appropriate browser option arguments
+- Manage browser instances with Open Browser / Close All Browsers patterns
+
+## CI/CD Integration
+- Use pabot for parallel test execution across multiple processes
+- Generate JUnit-compatible output.xml with --xunit flag for CI pipeline integration
+- Publish HTML report and log as CI artifacts using robot or rebot CLI
+- Use --exitonfailure and appropriate --loglevel flags per pipeline stage
+- Cache pip dependencies and browser binaries between pipeline runs
+
+## Reporting
+- Use the built-in HTML report (report.html) and log (log.html) for local review
+- Integrate with Allure Robot Framework Listener for richer, interactive reports
+- Archive report files with names that include the run timestamp and branch
+- Send pass/fail summary metrics to Slack or dashboards via listener plugins
+
+## Error Handling
+- Use Run Keyword And Continue On Failure for non-critical assertions
+- Implement teardown keywords that run even after test failure
+- Log meaningful messages with Log and Log To Console for debugging
+- Use Try / Except pattern in Python custom keywords for robust error recovery
+
+## Documentation
+- Document every test suite with a Suite Documentation section
+- Maintain a README.md with setup instructions, directory layout, and run commands
+- Document tag taxonomy in a TAGS.md file so teams can run the correct subsets
+- Include architecture notes on keyword layer design and library selection
+
+Remember to leverage Robot Framework's keyword-driven approach to make tests readable by the whole team — developers, testers, and business stakeholders alike.
