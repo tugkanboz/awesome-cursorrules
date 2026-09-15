@@ -1,0 +1,374 @@
+---
+description: Vue 3 + Vite component patterns — Composition API, <script setup>, Pinia, Vue Router 4, and TypeScript integration
+globs: **/*.vue,**/composables/**/*.ts,**/stores/**/*.ts,**/router/**/*.ts,vite.config.*
+alwaysApply: false
+---
+# Vue 3 + Vite Component Excellence
+
+## Composition API with `<script setup>`
+
+- **Always use `<script setup>`** — it's the recommended way to write Vue 3 components
+- Declare props with `defineProps<T>()` for full TypeScript inference; use `withDefaults` for defaults
+- Declare emits with `defineEmits<T>()` typed as an object type
+- Expose internals only when needed with `defineExpose()`
+- Keep template refs typed with `useTemplateRef()` (Vue 3.5+) or `ref<HTMLElement | null>(null)`
+
+```vue
+<!-- ✅ Well-typed component -->
+<!-- components/UserCard.vue -->
+<script setup lang="ts">
+import { computed } from 'vue'
+
+interface Props {
+  userId: string
+  displayName: string
+  avatarUrl?: string
+  isAdmin?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  isAdmin: false,
+})
+
+const emit = defineEmits<{
+  edit: [userId: string]
+  remove: [userId: string]
+}>()
+
+const initials = computed(() =>
+  props.displayName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+)
+</script>
+
+<template>
+  <div class="user-card">
+    <img v-if="props.avatarUrl" :src="props.avatarUrl" :alt="props.displayName" />
+    <span v-else class="avatar-placeholder">{{ initials }}</span>
+    <p>{{ props.displayName }}</p>
+    <button v-if="props.isAdmin" @click="emit('edit', props.userId)">Edit</button>
+    <button @click="emit('remove', props.userId)">Remove</button>
+  </div>
+</template>
+```
+
+## Reactive Primitives
+
+- Use `ref()` for primitives and single values; unwrap in templates automatically (no `.value`)
+- Use `reactive()` sparingly — prefer `ref()` to keep reactivity explicit and destructuring safe
+- Use `computed()` for derived state; avoid computing inside the template directly
+- Prefer `watchEffect()` for side effects that automatically track dependencies; use `watch()` when you need the old value or fine-grained control
+
+```typescript
+// ✅ ref + computed + watch pattern
+import { ref, computed, watch } from 'vue'
+
+const count = ref(0)
+const doubled = computed(() => count.value * 2)
+
+// watch for side-effects with cleanup
+watch(count, (newVal, oldVal, onCleanup) => {
+  const timer = setTimeout(() => saveCount(newVal), 500)
+  onCleanup(() => clearTimeout(timer))
+})
+
+// ❌ Avoid — reactive object loses reactivity on destructure
+// const state = reactive({ count: 0 })
+// const { count } = state  // no longer reactive!
+```
+
+## Composables
+
+- Name composables `use<Feature>` and place them in `src/composables/`
+- Return only what callers need; keep implementation private
+- Handle lifecycle and cleanup inside the composable
+- Accept `MaybeRefOrGetter<T>` (Vue 3.3+) so composables work with both raw values and refs
+
+```typescript
+// ✅ src/composables/useFetch.ts
+import { ref, toValue, watchEffect, type MaybeRefOrGetter } from 'vue'
+
+export function useFetch<T>(url: MaybeRefOrGetter<string>) {
+  const data = ref<T | null>(null)
+  const error = ref<Error | null>(null)
+  const loading = ref(false)
+
+  watchEffect(async () => {
+    const resolvedUrl = toValue(url)
+    if (!resolvedUrl) return
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const res = await fetch(resolvedUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      data.value = (await res.json()) as T
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err))
+    } finally {
+      loading.value = false
+    }
+  })
+
+  return { data, error, loading }
+}
+```
+
+```vue
+<!-- Using the composable -->
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useFetch } from '@/composables/useFetch'
+import type { Product } from '@/types'
+
+const route = useRoute()
+const productUrl = computed(() => `/api/products/${route.params.id}`)
+const { data: product, loading, error } = useFetch<Product>(productUrl)
+</script>
+
+<template>
+  <p v-if="loading">Loading…</p>
+  <p v-else-if="error">{{ error.message }}</p>
+  <ProductDetail v-else-if="product" :product="product" />
+</template>
+```
+
+## Pinia Store Patterns
+
+- Prefer the **Setup Store** syntax — it mirrors `<script setup>` and is easier to type
+- Export store as `use<Name>Store` from `src/stores/`
+- Keep actions async-safe: set loading/error state around async operations
+- Use `storeToRefs()` when destructuring to preserve reactivity
+
+```typescript
+// ✅ src/stores/cart.ts — Setup Store
+import { ref, computed } from 'vue'
+import { defineStore } from 'pinia'
+import type { CartItem } from '@/types'
+
+export const useCartStore = defineStore('cart', () => {
+  const items = ref<CartItem[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const total = computed(() =>
+    items.value.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  )
+
+  const itemCount = computed(() =>
+    items.value.reduce((sum, item) => sum + item.quantity, 0)
+  )
+
+  async function addItem(productId: string, quantity = 1) {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, quantity }),
+      })
+      if (!res.ok) throw new Error('Failed to add item')
+      items.value = await res.json()
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Unknown error'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function removeItem(productId: string) {
+    items.value = items.value.filter((i) => i.productId !== productId)
+  }
+
+  return { items, loading, error, total, itemCount, addItem, removeItem }
+})
+```
+
+```vue
+<!-- ✅ Using storeToRefs to keep reactivity when destructuring -->
+<script setup lang="ts">
+import { storeToRefs } from 'pinia'
+import { useCartStore } from '@/stores/cart'
+
+const cartStore = useCartStore()
+const { items, total, itemCount, loading } = storeToRefs(cartStore)
+// actions are plain functions — destructure directly
+const { addItem, removeItem } = cartStore
+</script>
+```
+
+## Vue Router 4 Patterns
+
+- Define routes with typed params using `vue-router`'s `RouteRecordRaw`
+- Use `useRoute()` and `useRouter()` inside `<script setup>`
+- Prefer named routes over path strings to survive refactors
+- Use navigation guards at the route level via `meta` + a global `beforeEach`
+
+```typescript
+// ✅ src/router/index.ts
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('@/views/HomeView.vue'),
+  },
+  {
+    path: '/products/:id',
+    name: 'product-detail',
+    component: () => import('@/views/ProductDetailView.vue'),
+    props: true,  // passes route.params as component props
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/AdminView.vue'),
+    meta: { requiresAuth: true, role: 'admin' },
+  },
+]
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes,
+  scrollBehavior(to, _from, savedPosition) {
+    return savedPosition ?? { top: 0 }
+  },
+})
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (to.meta.requiresAuth && !auth.isLoggedIn) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.role && auth.user?.role !== to.meta.role) {
+    return { name: 'forbidden' }
+  }
+})
+
+export default router
+```
+
+```vue
+<!-- ✅ Navigating with the router in a component -->
+<script setup lang="ts">
+import { useRouter, useRoute } from 'vue-router'
+
+const route = useRoute()
+const router = useRouter()
+
+function goToProduct(id: string) {
+  router.push({ name: 'product-detail', params: { id } })
+}
+</script>
+```
+
+## Template Best Practices
+
+- Prefer `v-bind` shorthand (`:`) and `v-on` shorthand (`@`)
+- Use `v-for` with a unique `:key` — never use index as key for mutable lists
+- Avoid `v-if` + `v-for` on the same element; wrap in `<template v-if>` or filter in a computed
+- Use `<Teleport>` for modals and tooltips that need to escape the component tree
+- Use `<Transition>` and `<TransitionGroup>` for enter/leave animations
+
+```vue
+<!-- ✅ Correct v-for with stable key -->
+<ul>
+  <li v-for="item in sortedItems" :key="item.id">
+    {{ item.name }}
+  </li>
+</ul>
+
+<!-- ✅ v-if guarding v-for — separate elements -->
+<template v-if="items.length > 0">
+  <ul>
+    <li v-for="item in items" :key="item.id">{{ item.name }}</li>
+  </ul>
+</template>
+<p v-else>No items found.</p>
+
+<!-- ✅ Modal in a Teleport -->
+<Teleport to="body">
+  <div v-if="showModal" class="modal-overlay">
+    <slot />
+  </div>
+</Teleport>
+```
+
+## Vite Configuration Tips
+
+```typescript
+// ✅ vite.config.ts
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from 'node:url'
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      // @/ maps to src/ — mirrors tsconfig paths
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
+  },
+})
+```
+
+```json
+// ✅ tsconfig.app.json — keep paths in sync with Vite alias
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+```
+
+## Component File Organization
+
+```
+src/
+├── components/          # Shared, reusable components (PascalCase filenames)
+│   ├── BaseButton.vue
+│   ├── BaseInput.vue
+│   └── UserAvatar.vue
+├── composables/         # Shared composables (useCamelCase filenames)
+│   ├── useFetch.ts
+│   └── useLocalStorage.ts
+├── stores/              # Pinia stores
+│   ├── auth.ts
+│   └── cart.ts
+├── router/
+│   └── index.ts
+├── views/               # Route-level page components
+│   ├── HomeView.vue
+│   └── ProductDetailView.vue
+├── types/               # Shared TypeScript types/interfaces
+│   └── index.ts
+└── App.vue
+```
+
+## Key Rules
+
+- Component filenames are **PascalCase** (`UserCard.vue`), not kebab-case
+- In templates, self-close components with no default slot: `<UserCard />`
+- Never mutate props directly — emit an event or use a local `ref` copy
+- Avoid `$parent`, `$refs` chaining, and `provide`/`inject` for anything a Pinia store handles better
+- Use `import.meta.env.VITE_*` for environment variables (never `process.env` in Vite projects)
