@@ -1,0 +1,354 @@
+---
+description: Vue 3 + TypeScript component patterns — Composition API, script setup, Pinia, Vue Router, composables, and testing
+globs: **/*.vue,**/composables/**/*.ts,**/stores/**/*.ts,**/router/**/*.ts
+alwaysApply: false
+---
+# Vue 3 TypeScript Component Excellence
+
+## Composition API with `<script setup>`
+
+- **Always use `<script setup>`** — it's the recommended syntax for Vue 3 SFCs
+- Define props and emits with `defineProps` / `defineEmits` using TypeScript interfaces
+- Expose only what parent components need via `defineExpose`
+- Keep template logic out of `<script setup>`; extract to composables when reused
+
+```vue
+<!-- ✅ Modern Vue 3 SFC with full TypeScript -->
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useUserStore } from '@/stores/user'
+
+interface Props {
+  userId: string
+  showAvatar?: boolean
+}
+
+interface Emits {
+  (e: 'update', id: string): void
+  (e: 'delete', id: string): void
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  showAvatar: true,
+})
+
+const emit = defineEmits<Emits>()
+
+const userStore = useUserStore()
+const isEditing = ref(false)
+
+const displayName = computed(() =>
+  userStore.getUserById(props.userId)?.name ?? 'Unknown'
+)
+
+function handleUpdate() {
+  emit('update', props.userId)
+  isEditing.value = false
+}
+
+onMounted(() => {
+  userStore.fetchUser(props.userId)
+})
+</script>
+
+<template>
+  <div class="user-card">
+    <img v-if="showAvatar" :src="userStore.getUserById(userId)?.avatar" :alt="displayName" />
+    <span>{{ displayName }}</span>
+    <button @click="handleUpdate">Save</button>
+  </div>
+</template>
+```
+
+## Composables Pattern
+
+Extract reusable stateful logic into composables (`use*` prefix, `/composables/` directory).
+
+```typescript
+// ✅ composables/useApi.ts — generic data-fetching composable
+import { ref, readonly } from 'vue'
+
+interface UseApiReturn<T> {
+  data: Readonly<Ref<T | null>>
+  loading: Readonly<Ref<boolean>>
+  error: Readonly<Ref<Error | null>>
+  execute: () => Promise<void>
+  reset: () => void
+}
+
+export function useApi<T>(fetcher: () => Promise<T>): UseApiReturn<T> {
+  const data = ref<T | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+
+  async function execute() {
+    loading.value = true
+    error.value = null
+
+    try {
+      data.value = await fetcher()
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err))
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function reset() {
+    data.value = null
+    error.value = null
+    loading.value = false
+  }
+
+  return {
+    data: readonly(data),
+    loading: readonly(loading),
+    error: readonly(error),
+    execute,
+    reset,
+  }
+}
+```
+
+```typescript
+// ✅ composables/useLocalStorage.ts — typed localStorage with reactivity
+import { ref, watch } from 'vue'
+
+export function useLocalStorage<T>(key: string, initialValue: T) {
+  const storedRaw = localStorage.getItem(key)
+  const stored = storedRaw ? (JSON.parse(storedRaw) as T) : initialValue
+  const value = ref<T>(stored)
+
+  watch(
+    value,
+    (newVal) => localStorage.setItem(key, JSON.stringify(newVal)),
+    { deep: true }
+  )
+
+  return value
+}
+```
+
+## Pinia State Management
+
+```typescript
+// ✅ stores/user.ts — Pinia store with full TypeScript
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import type { User } from '@/types'
+import { userApi } from '@/api/user'
+
+export const useUserStore = defineStore('user', () => {
+  // State
+  const users = ref<Map<string, User>>(new Map())
+  const currentUserId = ref<string | null>(null)
+  const loading = ref(false)
+
+  // Getters
+  const currentUser = computed(() =>
+    currentUserId.value ? users.value.get(currentUserId.value) ?? null : null
+  )
+
+  function getUserById(id: string): User | undefined {
+    return users.value.get(id)
+  }
+
+  // Actions
+  async function fetchUser(id: string): Promise<void> {
+    if (users.value.has(id)) return
+
+    loading.value = true
+    try {
+      const user = await userApi.getById(id)
+      users.value.set(id, user)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updateUser(id: string, patch: Partial<User>): Promise<void> {
+    const updated = await userApi.update(id, patch)
+    users.value.set(id, updated)
+  }
+
+  function setCurrentUser(id: string): void {
+    currentUserId.value = id
+  }
+
+  return {
+    users,
+    currentUserId,
+    loading,
+    currentUser,
+    getUserById,
+    fetchUser,
+    updateUser,
+    setCurrentUser,
+  }
+})
+```
+
+## Vue Router with TypeScript
+
+```typescript
+// ✅ router/index.ts — typed routes and navigation guards
+import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    title?: string
+  }
+}
+
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/',
+    component: () => import('@/layouts/DefaultLayout.vue'),
+    children: [
+      {
+        path: '',
+        name: 'home',
+        component: () => import('@/views/HomeView.vue'),
+        meta: { title: 'Home' },
+      },
+      {
+        path: 'dashboard',
+        name: 'dashboard',
+        component: () => import('@/views/DashboardView.vue'),
+        meta: { requiresAuth: true, title: 'Dashboard' },
+      },
+    ],
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginView.vue'),
+  },
+]
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes,
+  scrollBehavior: (_, __, savedPosition) => savedPosition ?? { top: 0 },
+})
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+})
+
+export default router
+```
+
+## Form Handling with VeeValidate + Zod
+
+```vue
+<!-- ✅ Typed form with VeeValidate and Zod schema -->
+<script setup lang="ts">
+import { useForm } from 'vee-validate'
+import { toTypedSchema } from '@vee-validate/zod'
+import { z } from 'zod'
+
+const schema = toTypedSchema(
+  z.object({
+    email: z.string().email('Enter a valid email'),
+    password: z.string().min(8, 'At least 8 characters'),
+  })
+)
+
+const { handleSubmit, errors, defineField, isSubmitting } = useForm({ validationSchema: schema })
+
+const [email, emailAttrs] = defineField('email')
+const [password, passwordAttrs] = defineField('password')
+
+const onSubmit = handleSubmit(async (values) => {
+  await authStore.login(values.email, values.password)
+})
+</script>
+
+<template>
+  <form @submit="onSubmit">
+    <input v-bind="emailAttrs" v-model="email" type="email" placeholder="Email" />
+    <span v-if="errors.email">{{ errors.email }}</span>
+
+    <input v-bind="passwordAttrs" v-model="password" type="password" placeholder="Password" />
+    <span v-if="errors.password">{{ errors.password }}</span>
+
+    <button type="submit" :disabled="isSubmitting">
+      {{ isSubmitting ? 'Signing in…' : 'Sign In' }}
+    </button>
+  </form>
+</template>
+```
+
+## Testing with Vitest + Vue Test Utils
+
+```typescript
+// ✅ Comprehensive component test
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount } from '@vuetest-utils/vue'
+import { createTestingPinia } from '@pinia/testing'
+import UserCard from '@/components/UserCard.vue'
+import { useUserStore } from '@/stores/user'
+
+describe('UserCard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders display name from store', async () => {
+    const wrapper = mount(UserCard, {
+      props: { userId: '1' },
+      global: {
+        plugins: [
+          createTestingPinia({
+            initialState: {
+              user: {
+                users: new Map([['1', { id: '1', name: 'Alice', avatar: '/alice.png' }]]),
+              },
+            },
+          }),
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('Alice')
+  })
+
+  it('emits update event on save', async () => {
+    const wrapper = mount(UserCard, {
+      props: { userId: '1' },
+      global: { plugins: [createTestingPinia()] },
+    })
+
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.emitted('update')).toEqual([['1']])
+  })
+
+  it('fetches user on mount', () => {
+    mount(UserCard, {
+      props: { userId: '42' },
+      global: { plugins: [createTestingPinia({ createSpy: vi.fn })] },
+    })
+
+    const store = useUserStore()
+    expect(store.fetchUser).toHaveBeenCalledWith('42')
+  })
+})
+```
+
+## Key Rules
+
+- Prefer `<script setup lang="ts">` over Options API for all new components
+- Keep components small and single-purpose; extract composables for logic reuse
+- Use `defineProps<Interface>()` with `withDefaults` instead of runtime prop declarations
+- Always type Pinia stores with the setup-store pattern (not `defineStore` options object)
+- Lazy-load route components with `() => import(...)` for code splitting
+- Use `readonly()` on refs returned from composables to prevent external mutation
+- Type emits explicitly with `defineEmits<Emits>()` — avoid string array syntax
