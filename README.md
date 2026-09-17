@@ -28,10 +28,12 @@ awesome-cursorrules/
 │   ├── cypress-javascript-test-automation-framework/
 │   ├── k6-performance-test-framework/
 │   ├── playwright-javascript-test-automation-framework/
+│   ├── pytest-python-unit-testing-framework/
 │   ├── restassured-java-framework/
 │   ├── selenium-net-test-automation-framework/
 │   ├── selenium-python-test-automation-framework/
-│   └── vitest-javascript-unit-test-framework/
+│   ├── vitest-javascript-unit-test-framework/
+│   └── webdriverio-javascript-test-automation-framework/
 ├── 🏗️ frameworks/                  # Framework .cursor/rules examples (with nested rules)
 │   ├── cypress/                    # .cursor/rules/{core,patterns}/*.mdc
 │   └── selenium-python/            # .cursor/rules/patterns/*.mdc
