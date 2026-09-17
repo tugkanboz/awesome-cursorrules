@@ -1,0 +1,92 @@
+# Project: pytest Python Unit Testing Framework
+
+## Framework Structure
+- Use pytest as the primary test runner for Python projects
+- Organize tests in a dedicated `tests/` directory mirroring the source layout
+- Use `conftest.py` files for shared fixtures and hooks at the appropriate scope
+- Leverage pytest plugins for extended functionality (pytest-cov, pytest-mock, pytest-asyncio)
+
+## Coding Standards
+- Follow PEP 8 and PEP 257 for code and docstring style
+- Use Black for code formatting and isort for import ordering
+- Enforce type hints throughout the codebase with mypy
+- Name test functions clearly: `test_<unit>_<scenario>_<expected_result>`
+
+## Test Organization
+- Group related tests in classes only when shared state or fixtures justify it
+- Use `pytest.mark` for categorizing tests (unit, integration, slow, smoke)
+- Keep test files flat and named `test_<module>.py`
+- Separate unit, integration, and end-to-end tests into distinct directories
+
+## Fixtures
+- Define fixtures in `conftest.py` at the lowest applicable scope
+- Prefer function-scoped fixtures to avoid shared state between tests
+- Use `yield` fixtures for setup/teardown instead of `setup_method`
+- Document fixture purpose and scope with a short docstring
+
+## Mocking Strategies
+- Use `pytest-mock` (the `mocker` fixture) instead of `unittest.mock.patch` decorators
+- Patch at the point of use, not at the point of definition
+- Use `mocker.spy` to verify calls without replacing behavior
+- Clean up all patches automatically via pytest-mock's autouse teardown
+
+## Assertions
+- Use plain `assert` statements; pytest rewrites them for readable failure output
+- Compare collections with `assert actual == expected` rather than `assertEqual`
+- Use `pytest.approx` for floating-point comparisons
+- Use `pytest.raises` as a context manager to assert expected exceptions
+
+## Parametrize
+- Use `@pytest.mark.parametrize` to eliminate duplicated test logic across inputs
+- Provide an `ids` argument or use meaningful parameter values for readable output
+- Combine `parametrize` markers on a single test for combinatorial coverage
+
+## Coverage
+- Configure `pytest-cov` in `pyproject.toml` or `setup.cfg`
+- Set branch coverage requirements (aim for ≥80% on core business logic)
+- Use `# pragma: no cover` sparingly and only for genuinely untestable code
+- Generate HTML reports locally; upload XML reports to CI coverage services
+
+## Async Testing
+- Use `pytest-asyncio` for coroutine-based tests
+- Declare `asyncio_mode = "auto"` in config to avoid per-test markers
+- Mock external I/O with `asynctest` or `unittest.mock.AsyncMock`
+- Test async generators and context managers explicitly
+
+## Test Data Management
+- Use factory functions or `pytest-factoryboy` for model/object creation
+- Store static fixtures as JSON/YAML files under `tests/fixtures/`
+- Avoid hardcoded magic values; use named constants or `pytest.param`
+- Generate randomized data with `faker` to surface edge cases
+
+## Performance
+- Use `pytest-xdist` (`-n auto`) for parallel test execution across cores
+- Mark slow tests with `@pytest.mark.slow` and exclude them from the default run
+- Profile test suite duration with `--durations=10` to identify bottlenecks
+- Reuse expensive fixtures at session scope when they are truly stateless
+
+## CI/CD Integration
+- Run tests with `pytest --tb=short -q` in CI for concise output
+- Output JUnit XML with `--junitxml=report.xml` for CI pipeline compatibility
+- Fail fast on the first error in CI with `-x`; use full run locally
+- Cache the `.pytest_cache` directory between CI runs for faster reruns
+
+## Configuration
+- Centralize pytest settings in `pyproject.toml` under `[tool.pytest.ini_options]`
+- Set `testpaths`, `python_files`, `python_classes`, and `python_functions` explicitly
+- Register custom marks in config to avoid `PytestUnknownMarkWarning`
+- Use `filterwarnings` to fail on unexpected deprecation warnings
+
+## Error Handling
+- Test both happy path and all documented exception paths
+- Assert on exception type and message, not just that an exception was raised
+- Use `pytest.warns` to assert expected warnings are emitted
+- Avoid bare `except Exception` in test helpers; let exceptions propagate
+
+## Documentation
+- Add a brief docstring to each test describing the scenario under test
+- Maintain a `tests/README.md` explaining how to run the suite and add new tests
+- Document custom marks and fixtures in `conftest.py` module docstrings
+- Include example pytest commands for common workflows in the project README
+
+Remember to leverage pytest's powerful plugin ecosystem and native assertion rewriting for expressive, maintainable Python tests.
