@@ -1,0 +1,100 @@
+# Project: Jest JavaScript Unit Testing Framework
+
+## Framework Structure
+- Use Jest as the primary test runner
+- Organize tests in __tests__ directories or with .test.js/.spec.js suffixes
+- Use TypeScript with ts-jest for type-safe test implementations
+- Separate unit, integration, and snapshot tests into distinct directories
+
+## Coding Standards
+- Follow JavaScript/TypeScript best practices
+- Use meaningful test and variable naming
+- Implement clean code principles
+- Limit describe block nesting to 3 levels maximum
+
+## Test Organization
+- Group related tests using describe blocks
+- Use it/test functions for individual test cases
+- Implement beforeEach/afterEach for setup and teardown
+- Use beforeAll/afterAll for expensive shared setup (databases, servers)
+
+## Best Practices
+- Follow Arrange-Act-Assert (AAA) pattern
+- Write focused, single-responsibility tests
+- Avoid test interdependencies and shared mutable state
+- Use jest.fn() for mock functions
+- Use jest.spyOn() for spying on existing methods
+- Prefer toEqual for deep equality over toBe for object comparisons
+
+## Mocking Strategies
+- Use jest.mock() for module-level mocking
+- Implement jest.spyOn() for method-level spying
+- Use jest.useFakeTimers() for time-dependent tests
+- Mock HTTP requests with msw (Mock Service Worker) or axios-mock-adapter
+- Reset mocks between tests with jest.resetAllMocks() or clearMocks: true in config
+- Restore mocks with jest.restoreAllMocks() after each test
+
+## Assertions
+- Use expect() with specific, descriptive matchers
+- Implement custom matchers via expect.extend() for domain-specific assertions
+- Use toMatchSnapshot() for stable UI component output testing
+- Use toMatchInlineSnapshot() for small inline snapshots
+- Prefer rejects.toThrow() for async error assertions
+
+## Coverage
+- Configure coverage with istanbul (default) or v8 provider
+- Set meaningful coverage thresholds (statements, branches, functions, lines)
+- Use coveragePathIgnorePatterns for generated or non-testable code
+- Generate HTML and lcov reports for local and CI visualization
+- Enable collectCoverageFrom to define exact coverage scope
+
+## Performance
+- Use --runInBand in CI for sequential execution when workers cause issues
+- Enable concurrent test files with --maxWorkers for faster local execution
+- Minimize unnecessary setup/teardown operations
+- Use --testPathPattern to run specific test files during development
+
+## Snapshot Testing
+- Keep snapshots small and focused
+- Use toMatchInlineSnapshot() for short, readable inline snapshots
+- Commit snapshot files and review them in pull requests
+- Update snapshots intentionally with --updateSnapshot flag
+
+## Module Resolution
+- Configure moduleNameMapper for path aliases and static assets
+- Use transform to handle non-JS files (CSS, images) with identity-obj-proxy
+- Configure moduleDirectories for custom module resolution
+- Use setupFilesAfterFramework for global test configuration (e.g., Testing Library)
+
+## Test Data Management
+- Use factory functions or fixtures for reusable test data
+- Define TypeScript interfaces for all test data structures
+- Avoid hardcoded magic values; use named constants
+- Generate dynamic data with @faker-js/faker when needed
+
+## CI/CD Integration
+- Configure --ci flag for strict snapshot behavior in CI
+- Use --reporters=jest-junit for pipeline-compatible XML reports
+- Set --forceExit if tests hang due to open async handles
+- Upload coverage reports to Codecov or SonarQube via lcov output
+
+## Environment Configuration
+- Use testEnvironment: 'node' for Node.js and 'jsdom' for browser-like environments
+- Configure jest.config.js or jest.config.ts for full TypeScript support
+- Use globalSetup and globalTeardown for external service startup/shutdown
+- Handle environment variables with dotenv via setupFiles
+
+## Error Handling
+- Test both success and failure code paths
+- Assert on specific error messages and types
+- Use expect().rejects for async error testing
+- Implement retry logic tests for flaky network operations
+- Use --detectOpenHandles to diagnose tests that hang
+
+## Documentation
+- Document complex test scenarios with brief inline comments
+- Maintain a test helper and mock README
+- Include examples for custom matchers (expect.extend)
+- Document project-specific mock strategies and module mappings
+
+Remember to keep Jest configuration minimal and explicit, and run tests in watch mode during development with jest --watch.
