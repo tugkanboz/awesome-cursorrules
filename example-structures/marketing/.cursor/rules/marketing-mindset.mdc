@@ -1,0 +1,82 @@
+---
+description: Marketing decision discipline for growth and client-acquisition work — evidence freshness, live-competitor benchmarking, pre-declared test volume floors, channel kill rules, positioning, and cold outreach
+globs: **/*.md,**/*.mdx,**/*.html,**/*.tsx,**/*.jsx
+alwaysApply: false
+---
+# Marketing Mindset Excellence
+
+The decision layer for marketing, growth, and client-acquisition tasks: writing an ad, landing page, or cold outreach, finding the first customers, choosing or killing a channel, positioning a product, or judging whether doing X will produce Y. It is a way of thinking, not a tactic list.
+
+## Evidence and Time Horizon
+
+- **3-month horizon** — judge every idea on a 3-month window. If it can only pay off after a year or more, it is not the current move
+- **6-month freshness rule** — prefer evidence from the last 6 months. Older reports, case studies, and remembered best practices are history, not current market truth
+- **Never answer from general knowledge alone** — check what is happening now, then reason from it
+- **Honest over agreeable** — if the numbers do not support the idea, say so and give what to do instead
+
+```text
+❌  "Publish evergreen content for two years, then the pipeline compounds."
+✅  "Run one channel test this month with a declared budget and a yes/no threshold."
+```
+
+## Benchmark Live Competitors
+
+- **Same audience, right now** — benchmark against companies actively working the user's exact audience and making money from it today
+- **Weight young competitors highest** — their playbook is recent, short, and copyable
+- **Check for the plateau** — a mid-size or old competitor can be covered in the press and still be flat
+- **Advertising-only channels** — launch and top-10 lists, reports older than 6 months, and paid influencer posts are advertising, not evidence
+- **Social accounts are the closest thing to signal** — after stripping fake engagement, read what is left
+
+## Pre-Declare Test Volume Floors
+
+- **Declare before launch** — expected volume, cost per result, and the threshold that counts as success
+- **Respect the floor** — a result from a sample below the declared floor is no data. A 0.0% rate from 40 impressions is not a failure
+- **One variable per test** — one change, the declared budget, a clear yes or no
+- **Kill rules up front** — cost per client above what a client is worth, floor volume reached with no return, or a channel that cannot be attributed. When a kill rule fires, stop and keep the decision on record
+- **Attribute every channel** — an untagged campaign can only feel like it is working
+
+```text
+❌  "40 impressions, 0 clicks. The channel is dead."
+✅  "The floor was 1,000 impressions before judging, so this run produced no data yet."
+```
+
+## Win the First Clients by Hand
+
+- **Client #0 is the founder** — they use their own product first, because that is the cheapest way to see whether it will win
+- **Zero clients means manual** — direct messages, cold email, real conversations. No paid channels or media spend before the first hand-closed client
+- **Clients 2 through 10** — copy what live competitors are already doing successfully
+- **Money scales, it does not start** — paid channels come after manual proof exists
+
+## Positioning and Copy
+
+- **Strongest true version** — rewrite the user's raw description as the best honest framing of it: same facts, better words, no invented proof
+- **Lead with the reader** — people read about themselves, not about the feature list
+- **One feeling per asset** — copy that carries no emotion is forgettable, and the emotional read is what makes it travel
+- **Marketing may run ahead of the product** — a landing page describing what is coming is allowed, with an honest timeline
+- **Draw for the eye** — every visual needs a scene, one hero subject, and a sense of movement
+
+```markdown
+❌  "We built a tool with SMTP validation and a REST API."
+✅  "Find verified business contacts with a 2-5% bounce rate instead of the 20% you get from static databases."
+```
+
+## Refusals and Anti-Patterns
+
+- **No zero-exchange work** — no audience reached, no reusable asset, no data, no path to revenue is not marketing
+- **No paid channels at zero clients**
+- **No trust in proxy metrics** — interrogate who published a case study and whether it deviates wildly from normal benchmarks
+- **No 2-year plans** — and never block the user from making a bold first move
+- **No untestable hypotheses** — if a test needs weeks or a specialist, redesign it
+
+## Key Rules
+
+- Every hypothesis gets a 3-month outcome and one fast test attached
+- Competitor analysis names companies working the user's exact audience today, not old or absent ones
+- Volume floors, success thresholds, and kill rules are written down before spend, not after
+- The first client is won by hand; the founder is client #0
+- Output is concrete content and channel tasks with instructions, not vague advice
+- Feedback is honest, not agreeable
+
+## Attribution
+
+Adapted from the MIT-licensed Marketing Mindset skill by Axel Freeman. Reasoning guidance only: no scripts, no network calls, no credentials, nothing to execute.
