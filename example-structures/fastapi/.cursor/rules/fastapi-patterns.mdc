@@ -1,0 +1,267 @@
+---
+description: FastAPI patterns — Pydantic models, async routes, dependency injection, error handling, and testing with pytest + httpx
+globs: **/routers/**/*.py,**/models/**/*.py,**/schemas/**/*.py,**/dependencies/**/*.py,**/main.py,**/conftest.py
+alwaysApply: false
+---
+# FastAPI Excellence
+
+## Project Structure
+```
+app/
+├── main.py               # FastAPI app factory and lifespan handler
+├── dependencies.py       # Shared Depends() callables
+├── routers/
+│   ├── users.py
+│   └── products.py
+├── models/               # SQLAlchemy / SQLModel ORM models
+│   └── user.py
+├── schemas/              # Pydantic request / response schemas
+│   └── user.py
+├── services/             # Business logic, no HTTP concepts
+│   └── user_service.py
+└── tests/
+    ├── conftest.py       # AsyncClient fixture
+    └── test_users.py
+```
+
+## Pydantic Schemas
+
+- Separate **request** and **response** schemas; never reuse the same model for both
+- Use `model_config = ConfigDict(from_attributes=True)` on response schemas to support ORM objects
+- Annotate IDs as `UUID` and timestamps as `datetime` — never bare `str`
+
+```python
+from __future__ import annotations
+from datetime import datetime
+from uuid import UUID
+from pydantic import BaseModel, EmailStr, ConfigDict
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    name: str
+    password: str  # raw; hashed in service layer
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: EmailStr
+    name: str
+    created_at: datetime
+```
+
+## Async Route Handlers
+
+- Use `async def` for all handlers that touch I/O (DB, HTTP, cache)
+- Return **schema instances**, not raw dicts — FastAPI serialises them automatically
+- Raise `HTTPException` for client errors; let middleware handle unexpected exceptions
+
+```python
+from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import get_db, get_current_user
+from app.schemas.user import UserCreate, UserResponse
+from app.services.user_service import UserService
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    payload: UserCreate,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    service = UserService(db)
+    if await service.get_by_email(payload.email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+    return await service.create(payload)
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _current: UserResponse = Depends(get_current_user),
+) -> UserResponse:
+    service = UserService(db)
+    user = await service.get(user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+```
+
+## Dependency Injection
+
+- One `Depends()` per concern — database session, auth, pagination, rate-limiting
+- Use `yield` dependencies for resources that need teardown (sessions, locks)
+
+```python
+from typing import AsyncGenerator
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import async_session_factory
+from app.schemas.user import UserResponse
+from app.services.auth_service import decode_token
+
+bearer = HTTPBearer()
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    payload = decode_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    from app.services.user_service import UserService
+    user = await UserService(db).get(payload["sub"])
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+```
+
+## App Factory and Lifespan
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.routers import users, products
+from app.database import engine, Base
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # shutdown
+    await engine.dispose()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="My API",
+        version="1.0.0",
+        lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(users.router, prefix="/api/v1")
+    app.include_router(products.router, prefix="/api/v1")
+
+    return app
+
+
+app = create_app()
+```
+
+## Testing with pytest + httpx
+
+- Use `AsyncClient` from `httpx` with `ASGITransport` — no running server needed
+- Override `get_db` in each test that touches the DB so tests share an in-memory transaction
+- Assert on `response.status_code` **and** `response.json()` structure
+
+```python
+# tests/conftest.py
+import pytest
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+from app.main import app
+from app.dependencies import get_db
+from app.database import Base
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+engine = create_async_engine(TEST_DATABASE_URL)
+TestingSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def setup_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest_asyncio.fixture
+async def client():
+    async def override_get_db():
+        async with TestingSessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
+# tests/test_users.py
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_create_user(client):
+    payload = {"email": "alice@example.com", "name": "Alice", "password": "secret123"}
+    response = await client.post("/api/v1/users/", json=payload)
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["email"] == payload["email"]
+    assert "id" in data
+    assert "password" not in data  # never leak hashed password
+
+
+@pytest.mark.asyncio
+async def test_create_user_duplicate_email(client):
+    payload = {"email": "bob@example.com", "name": "Bob", "password": "secret123"}
+    await client.post("/api/v1/users/", json=payload)
+    response = await client.post("/api/v1/users/", json=payload)
+
+    assert response.status_code == 409
+```
+
+## Key Rules
+
+- **Never** put business logic inside route handlers — delegate to a `*Service` class
+- Use `response_model=` on every route so FastAPI strips unexpected fields from the response
+- Prefer `status.HTTP_*` constants over raw integers for readability
+- Validate environment config with a Pydantic `BaseSettings` class, not `os.getenv()` calls
+- Set `root_path` when deploying behind a reverse proxy so `/docs` links are correct
