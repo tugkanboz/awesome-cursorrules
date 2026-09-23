@@ -27,6 +27,21 @@ selenium-python/
 - **Page Object Excellence**: Advanced POM with fluent interfaces and components
 - **Test Patterns**: Data-driven testing, fixtures, error handling, performance testing
 
+### 🎸 SvelteKit
+```
+svelte-kit/
+├── .cursor/rules/
+│   └── component-patterns.mdc        # Runes, load functions, form actions, server routes
+└── src/
+```
+
+**Key Features:**
+- **Svelte 5 Runes**: `$state`, `$derived`, `$effect` replacing legacy stores and reactive statements
+- **Typed Props**: `$props()` with TypeScript interfaces instead of `export let`
+- **Load Functions**: `+page.server.ts` for DB/auth, `+page.ts` for universal data fetching
+- **Form Actions**: Progressive enhancement with `use:enhance`, Zod validation, `fail()` responses
+- **Server Routes**: Typed `RequestHandler` with `json()` helpers for REST APIs
+
 ### 🌐 Cypress E2E Testing
 ```
 cypress/
