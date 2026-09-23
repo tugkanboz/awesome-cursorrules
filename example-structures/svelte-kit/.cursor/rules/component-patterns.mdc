@@ -1,0 +1,154 @@
+---
+description: SvelteKit patterns — Svelte 5 runes, load functions, form actions, server routes, and TypeScript integration
+globs: **/*.svelte,**/*.svelte.ts,**/routes/**/*.ts,**/routes/**/*.js,svelte.config.*
+alwaysApply: false
+---
+# SvelteKit Component & Routing Excellence
+
+## Svelte 5 Runes (State Management)
+
+```svelte
+<!-- ✅ Use $state, $derived, $effect instead of legacy stores -->
+<script lang="ts">
+  let count = $state(0)
+  let doubled = $derived(count * 2)
+
+  // ✅ $effect replaces reactive statements and onMount side effects
+  $effect(() => {
+    document.title = `Count: ${count}`
+  })
+
+  function increment() {
+    count++
+  }
+</script>
+
+<button onclick={increment}>Count: {count} (doubled: {doubled})</button>
+```
+
+## Component Props with Runes
+
+```svelte
+<!-- ✅ $props() replaces export let -->
+<script lang="ts">
+  interface Props {
+    title: string
+    description?: string
+    onClose?: () => void
+  }
+
+  let { title, description = '', onClose }: Props = $props()
+</script>
+
+<div>
+  <h2>{title}</h2>
+  {#if description}<p>{description}</p>{/if}
+  {#if onClose}<button onclick={onClose}>Close</button>{/if}
+</div>
+```
+
+## Page Load Functions
+
+```typescript
+// ✅ src/routes/products/[id]/+page.server.ts
+// Use server load for DB access, auth checks, and private data
+import { error } from '@sveltejs/kit'
+import type { PageServerLoad } from './$types'
+
+export const load: PageServerLoad = async ({ params, locals }) => {
+  const product = await locals.db.product.findUnique({ where: { id: params.id } })
+
+  if (!product) {
+    error(404, 'Product not found')
+  }
+
+  return { product }
+}
+```
+
+```typescript
+// ✅ src/routes/products/+page.ts
+// Use universal load (runs on server + client) for public API calls
+import type { PageLoad } from './$types'
+
+export const load: PageLoad = async ({ fetch, params }) => {
+  const res = await fetch(`/api/products/${params.id}`)
+  if (!res.ok) error(res.status, await res.text())
+  return { product: await res.json() }
+}
+```
+
+## Form Actions
+
+```typescript
+// ✅ src/routes/contact/+page.server.ts — use actions for mutations
+import { fail, redirect } from '@sveltejs/kit'
+import { z } from 'zod'
+import type { Actions } from './$types'
+
+const schema = z.object({
+  email: z.string().email(),
+  message: z.string().min(10),
+})
+
+export const actions: Actions = {
+  default: async ({ request }) => {
+    const data = Object.fromEntries(await request.formData())
+    const result = schema.safeParse(data)
+
+    if (!result.success) {
+      return fail(400, { errors: result.error.flatten().fieldErrors, values: data })
+    }
+
+    await sendEmail(result.data)
+    redirect(303, '/contact/success')
+  },
+}
+```
+
+```svelte
+<!-- ✅ src/routes/contact/+page.svelte — use enhance for progressive enhancement -->
+<script lang="ts">
+  import { enhance } from '$app/forms'
+  import type { ActionData } from './$types'
+
+  let { form }: { form: ActionData } = $props()
+</script>
+
+<form method="POST" use:enhance>
+  <input name="email" type="email" value={form?.values?.email ?? ''} />
+  {#if form?.errors?.email}<span>{form.errors.email[0]}</span>{/if}
+
+  <textarea name="message">{form?.values?.message ?? ''}</textarea>
+  {#if form?.errors?.message}<span>{form.errors.message[0]}</span>{/if}
+
+  <button type="submit">Send</button>
+</form>
+```
+
+## Server Routes (API Endpoints)
+
+```typescript
+// ✅ src/routes/api/items/+server.ts
+import { json, error } from '@sveltejs/kit'
+import type { RequestHandler } from './$types'
+
+export const GET: RequestHandler = async ({ url, locals }) => {
+  const page = Number(url.searchParams.get('page') ?? 1)
+  const items = await locals.db.item.findMany({ skip: (page - 1) * 20, take: 20 })
+  return json({ items })
+}
+
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const body = await request.json()
+  const item = await locals.db.item.create({ data: body })
+  return json(item, { status: 201 })
+}
+```
+
+## Key Conventions
+- Prefer `+page.server.ts` load over `+page.ts` when accessing `locals`, DB, or secrets
+- Use `$app/navigation`'s `goto` and `invalidate` instead of manual fetches after mutations
+- Type all load return values with generated `$types` — never cast `any`
+- Co-locate tests next to routes: `+page.test.ts` beside `+page.svelte`
+- Use `$env/static/private` for build-time secrets, `$env/dynamic/private` for runtime
