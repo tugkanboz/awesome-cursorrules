@@ -1,0 +1,116 @@
+# Project: Go Test Automation Framework
+
+## Framework Structure
+- Use Go's built-in `testing` package as the primary test runner
+- Place test files alongside source files with `_test.go` suffix
+- Use `testify` (`github.com/stretchr/testify`) for assertions and mocking
+- Organize integration and end-to-end tests under a dedicated `integration/` directory
+
+## Coding Standards
+- Follow Go naming conventions: `TestFunctionName`, `BenchmarkFunctionName`, `FuzzFunctionName`
+- Keep test functions short and focused on one behavior per test
+- Use `t.Helper()` in helper functions to improve failure location reporting
+- Run `go vet ./...` and `golangci-lint` before committing test code
+
+## Test Organization
+- Use table-driven tests (`[]struct{ ... }`) for testing multiple input/output combinations
+- Use sub-tests with `t.Run("scenario name", func(t *testing.T) {...})` for clear output
+- Group related helpers and fixtures in `testhelpers` or `internal/testutil` packages
+- Separate unit tests from integration tests using build tags: `//go:build integration`
+
+## Best Practices
+- Follow the Arrange-Act-Assert (AAA) pattern in every test
+- Call `t.Parallel()` at the start of independent tests and sub-tests for faster execution
+- Use `t.Cleanup(func() {...})` for teardown instead of deferred cleanup in helpers
+- Avoid global state; inject dependencies explicitly for easier testing
+
+## Table-Driven Test Pattern
+```go
+func TestAdd(t *testing.T) {
+    t.Parallel()
+    tests := []struct {
+        name string
+        a, b int
+        want int
+    }{
+        {"positive numbers", 1, 2, 3},
+        {"negative numbers", -1, -2, -3},
+        {"zero values", 0, 0, 0},
+    }
+    for _, tc := range tests {
+        tc := tc // capture range variable
+        t.Run(tc.name, func(t *testing.T) {
+            t.Parallel()
+            got := Add(tc.a, tc.b)
+            require.Equal(t, tc.want, got)
+        })
+    }
+}
+```
+
+## Assertions with testify
+- Use `require` for fatal assertions that stop the test immediately on failure
+- Use `assert` for non-fatal assertions that continue execution after failure
+- Prefer `require.Equal(t, expected, actual)` over raw `if` checks
+- Use `assert.NoError(t, err)` and `require.Error(t, err)` for error assertions
+
+## Mocking Strategies
+- Use `testify/mock` for interface-based mocking
+- Generate mock implementations with `mockery` (`github.com/vektra/mockery`)
+- Define interfaces in the consuming package, not the provider package
+- Use `mock.AssertExpectations(t)` at the end of every test using mocks
+
+## HTTP and API Testing
+- Use `net/http/httptest` for testing HTTP handlers without a running server
+- Use `httptest.NewRecorder()` to capture handler responses
+- Use `httptest.NewServer()` for testing HTTP clients against a real TCP listener
+- Structure handler tests with `httptest.NewRequest` for clean request construction
+
+## Database Testing
+- Use `github.com/DATA-DOG/go-sqlmock` for mocking `database/sql` interactions
+- Use real databases with Docker via `testcontainers-go` for integration tests
+- Apply and roll back migrations in tests using `database/sql` transactions
+- Use `t.Cleanup` to close connections and stop containers
+
+## Coverage
+- Generate coverage with `go test -coverprofile=coverage.out ./...`
+- View HTML coverage with `go tool cover -html=coverage.out`
+- Set minimum coverage thresholds in CI pipelines
+- Exclude generated code and `main` packages from coverage reporting
+
+## Benchmarks
+- Write benchmarks with `func BenchmarkXxx(b *testing.B)` for performance-critical paths
+- Use `b.ResetTimer()` after expensive setup operations
+- Use `b.ReportAllocs()` to track memory allocations
+- Run benchmarks with `go test -bench=. -benchmem ./...`
+
+## Fuzzing
+- Use Go's built-in fuzzing with `func FuzzXxx(f *testing.F)` for input validation
+- Seed the corpus with `f.Add(...)` for known edge cases
+- Run fuzz tests in CI with a fixed duration: `go test -fuzz=FuzzXxx -fuzztime=30s`
+
+## CI/CD Integration
+- Run `go test -race ./...` to detect data races in CI
+- Use `-count=1` to disable test result caching in CI environments
+- Generate JUnit XML output with `gotestsum --junitfile report.xml`
+- Cache the Go module cache (`$GOPATH/pkg/mod`) between CI runs
+
+## Environment Configuration
+- Use environment variables for external service configuration in tests
+- Skip integration tests when required services are unavailable: `t.Skip(...)`
+- Use `TestMain(m *testing.M)` for package-level setup and teardown
+- Store test fixtures under `testdata/` directories (automatically excluded from builds)
+
+## Error Handling
+- Test error paths explicitly with `require.Error` and `require.EqualError`
+- Use `errors.Is` and `errors.As` for wrapped error assertions
+- Test both the error type and message for public API errors
+- Validate that error messages are user-friendly and non-leaking
+
+## Documentation
+- Document complex test scenarios with a brief comment above the test function
+- Maintain a `CONTRIBUTING.md` with instructions on running the test suite
+- Document build tags and how to run integration vs unit tests separately
+- Include example usage in `_test.go` files with `ExampleFunctionName` functions
+
+Remember to leverage Go's built-in concurrency-safe testing, race detector, and fuzzing for robust, fast, and comprehensive test coverage.
