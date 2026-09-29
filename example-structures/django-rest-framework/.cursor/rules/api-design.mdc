@@ -1,0 +1,151 @@
+---
+description: Django REST Framework API design — ViewSets, Serializers, permissions, filtering, and pagination best practices
+globs: **/serializers/**/*.py,**/views/**/*.py,**/viewsets/**/*.py,**/api/**/*.py,**/urls.py
+alwaysApply: false
+---
+# Django REST Framework API Design Excellence
+
+## ViewSet & Router Organization
+
+- Use `ModelViewSet` for full CRUD; narrow to `ReadOnlyModelViewSet` or mix-ins when write operations are not needed
+- Register ViewSets on a `DefaultRouter`; define URL patterns once in `urls.py`
+- Override `get_queryset` to apply request-specific filtering; never filter in the serializer
+
+```python
+# ✅ api/views/product.py
+from rest_framework import viewsets, permissions, filters
+from django_filters.rest_framework import DjangoFilterBackend
+from api.models import Product
+from api.serializers import ProductSerializer, ProductWriteSerializer
+
+class ProductViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["category", "is_active"]
+    search_fields = ["name", "description"]
+    ordering_fields = ["price", "created_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        return Product.objects.select_related("category").filter(is_active=True)
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return ProductWriteSerializer
+        return ProductSerializer
+
+# ✅ api/urls.py
+from rest_framework.routers import DefaultRouter
+from api.views.product import ProductViewSet
+
+router = DefaultRouter()
+router.register(r"products", ProductViewSet, basename="product")
+urlpatterns = router.urls
+```
+
+## Serializers
+
+- Separate **read** and **write** serializers for non-trivial models — avoids over-posting and simplifies validation
+- Use `source` to flatten nested fields in read serializers; keep write serializers flat
+- Override `validate_<field>` for single-field checks; `validate` for cross-field logic
+- Use `SerializerMethodField` sparingly — prefer properties on the model when the value is always needed
+
+```python
+# ✅ api/serializers/product.py
+from rest_framework import serializers
+from api.models import Product, Category
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ["id", "name", "slug"]
+
+class ProductSerializer(serializers.ModelSerializer):
+    category = CategorySerializer(read_only=True)
+    price_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = ["id", "name", "description", "price", "price_display", "category", "created_at"]
+
+    def get_price_display(self, obj) -> str:
+        return f"${obj.price:.2f}"
+
+class ProductWriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ["name", "description", "price", "category"]
+
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than zero.")
+        return value
+```
+
+## Permissions
+
+- Create custom permission classes in `permissions.py`; never embed permission logic in views
+- Use `IsOwnerOrReadOnly` pattern for user-owned resources
+
+```python
+# ✅ api/permissions.py
+from rest_framework import permissions
+
+class IsOwnerOrReadOnly(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj.owner == request.user
+```
+
+## Pagination
+
+- Configure pagination globally in `settings.py`; override per-ViewSet when needed
+- Use `PageNumberPagination` for UIs; `CursorPagination` for infinite scroll / large datasets
+
+```python
+# ✅ settings.py
+REST_FRAMEWORK = {
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/day",
+        "user": "1000/day",
+    },
+}
+```
+
+## Error Responses
+
+- Use DRF's built-in exception handling — avoid raw `HttpResponse` for API views
+- Return consistent error shapes by customising `EXCEPTION_HANDLER` in settings
+
+```python
+# ✅ api/exceptions.py
+from rest_framework.views import exception_handler
+from rest_framework.response import Response
+
+def custom_exception_handler(exc, context):
+    response = exception_handler(exc, context)
+    if response is not None:
+        response.data = {
+            "error": {
+                "status_code": response.status_code,
+                "detail": response.data,
+            }
+        }
+    return response
+```

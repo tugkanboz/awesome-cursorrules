@@ -1,0 +1,153 @@
+---
+description: Django model design and ORM query patterns — field definitions, managers, select_related/prefetch_related, signals, and migrations
+globs: **/models/**/*.py,**/managers/**/*.py,**/migrations/**/*.py,**/admin.py
+alwaysApply: false
+---
+# Django Models & ORM Excellence
+
+## Model Design
+
+- Add `__str__` to every model; include the primary identifier
+- Set `ordering` in `Meta` only when the default order is always correct; otherwise order in querysets
+- Use `related_name` on every `ForeignKey`/`ManyToManyField` to prevent clashes and improve readability
+- Prefer `get_or_create` / `update_or_create` over manual check-then-save patterns
+
+```python
+# ✅ models/product.py
+from django.db import models
+from django.utils.text import slugify
+
+class Category(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
+
+    class Meta:
+        verbose_name_plural = "categories"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+class Product(models.Model):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    category = models.ForeignKey(
+        Category, on_delete=models.PROTECT, related_name="products"
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["category", "is_active"])]
+
+    def __str__(self) -> str:
+        return self.name
+```
+
+## Custom Managers & QuerySets
+
+- Define querysets on a `QuerySet` class, attach via `Manager.from_queryset()`; this makes methods chainable
+- Keep business logic in managers/querysets — not in views or serializers
+
+```python
+# ✅ managers/product.py
+from django.db import models
+
+class ProductQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(is_active=True)
+
+    def with_category(self):
+        return self.select_related("category")
+
+    def in_price_range(self, min_price, max_price):
+        return self.filter(price__gte=min_price, price__lte=max_price)
+
+class ProductManager(models.Manager):
+    def get_queryset(self) -> ProductQuerySet:
+        return ProductQuerySet(self.model, using=self._db)
+
+    def active(self):
+        return self.get_queryset().active()
+```
+
+## Efficient ORM Queries
+
+- Always call `select_related` for `ForeignKey`/`OneToOne` and `prefetch_related` for `ManyToMany`/reverse FK in list views
+- Use `only()` / `defer()` when only a subset of columns is needed in bulk reads
+- Use `values()` or `values_list()` for aggregations and exports where model instances aren't required
+- Avoid N+1: annotate counts with `Count` rather than calling `.count()` per object in a loop
+
+```python
+# ✅ Efficient list query
+from django.db.models import Count, Avg
+
+products = (
+    Product.objects
+    .active()
+    .with_category()
+    .prefetch_related("tags")
+    .annotate(review_count=Count("reviews"), avg_rating=Avg("reviews__rating"))
+    .only("id", "name", "price", "category_id")
+)
+
+# ❌ N+1 — never do this in a loop
+for product in Product.objects.all():
+    print(product.category.name)  # one query per iteration
+```
+
+## Signals
+
+- Use signals only for cross-app concerns (e.g. sending an email after an order is confirmed)
+- Register signals in `apps.py` `ready()` — never at module level in `models.py`
+- Keep signal receivers thin; delegate to a service/task
+
+```python
+# ✅ apps.py
+from django.apps import AppConfig
+
+class OrdersConfig(AppConfig):
+    name = "orders"
+
+    def ready(self):
+        import orders.signals  # noqa: F401
+
+# ✅ signals.py
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from orders.models import Order
+from orders.tasks import send_confirmation_email
+
+@receiver(post_save, sender=Order)
+def order_confirmed(sender, instance, created, **kwargs):
+    if created:
+        send_confirmation_email.delay(instance.pk)
+```
+
+## Migrations
+
+- Keep migrations atomic; never add data migrations and schema changes in the same file
+- Name significant migrations with `--name` flag: `makemigrations --name add_product_index`
+- Use `RunPython` with a reverse function so `migrate --run-syncdb` and rollbacks work
+
+```python
+# ✅ migrations/0005_add_product_index.py
+from django.db import migrations, models
+
+class Migration(migrations.Migration):
+    dependencies = [("products", "0004_product_is_active")]
+
+    operations = [
+        migrations.AddIndex(
+            model_name="product",
+            index=models.Index(fields=["category", "is_active"], name="product_cat_active_idx"),
+        ),
+    ]
+```
